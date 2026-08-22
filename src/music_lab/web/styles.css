@@ -38,10 +38,15 @@ button, select, input { font: inherit; }
 .shell { width: calc(100% - 28px); margin: 0 auto; padding: 22px 0 34px; }
 
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 120;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   padding: 8px 4px 25px;
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  backdrop-filter: blur(12px);
 }
 
 .eyebrow, .section-index {
@@ -230,7 +235,7 @@ h1 { font-size: 31px; }
   width: 100%;
   margin-bottom: 10px;
 }
-.layout-control-panel { flex: 1 1 760px; min-width: 0; padding: 5px 7px; border: 1px solid var(--surface-0); border-radius: 10px; background: rgba(17,17,27,.35); }
+.layout-control-panel { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 10px; }
 .layout-control-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
 .layout-control-heading .section-index { font-size: 9px; }
 .layout-scene-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 5px; }
@@ -246,6 +251,7 @@ h1 { font-size: 31px; }
 .layout-scene-row.selected { color: var(--text); border-color: rgba(203,166,247,.55); background: rgba(203,166,247,.14); }
 .layout-scene-row small { color: var(--mauve); font: 9px "Cascadia Mono", Consolas, monospace; }
 .layout-scene-order { color: var(--overlay); font: 9px "Cascadia Mono", Consolas, monospace; }
+.layout-control-panel .view-controls { justify-content: flex-start; margin: 2px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
 .free-workspace > .panel {
   position: relative;
   display: flex;
@@ -267,9 +273,9 @@ h1 { font-size: 31px; }
 .free-workspace.layout-unlocked .panel-drag-handle { color: var(--cyan); border-color: rgba(137,220,235,.3); background: rgba(137,220,235,.08); }
 .free-workspace:not(.layout-unlocked) .panel-drag-handle,
 .free-workspace:not(.layout-unlocked) .panel-resize-handle { display: none; }
-.free-workspace.panel-focus-mode { position: fixed; z-index: 100; inset: 10px; display: block; width: auto; min-height: 0; margin: 0; padding: 10px; overflow: auto; background: var(--bg); border: 1px solid var(--surface-1); border-radius: 14px; box-shadow: 0 26px 90px rgba(0,0,0,.65); }
+.free-workspace.panel-focus-mode { position: fixed; z-index: 100; inset: 78px 10px 10px; display: block; width: auto; min-height: 0; margin: 0; padding: 10px; overflow: auto; background: var(--bg); border: 1px solid var(--surface-1); border-radius: 14px; box-shadow: 0 26px 90px rgba(0,0,0,.65); }
 .free-workspace.panel-focus-mode > .panel { display: none; }
-.free-workspace.panel-focus-mode > .panel.panel-focused { display: flex; width: 100%; min-height: calc(100vh - 42px); height: calc(100vh - 42px); overflow: auto; }
+.free-workspace.panel-focus-mode > .panel.panel-focused { display: flex; width: 100%; min-height: calc(100vh - 110px); height: calc(100vh - 110px); overflow: auto; }
 .free-workspace.panel-focus-mode .panel-focus-button { color: var(--cyan); border-color: rgba(137,220,235,.36); background: var(--cyan-soft); }
 .presentation-playing .layout-scene-controls button#layoutSceneDelete { opacity: .5; }
 .free-workspace.layout-unlocked .panel-drag-handle:active { cursor: grabbing; }

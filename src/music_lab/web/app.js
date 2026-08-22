@@ -1647,6 +1647,12 @@ function renderStatus() {
     ? `AUDIO · ${audio.output_latency_ms?.toFixed(1) || "?"} ms · ${audio.output_device_name || "默认输出"}${underrunLabel}`
     : `AUDIO · ${audio.error || (audio.enabled ? "不可用" : "已关闭")}`;
   audioElement.className = `status-pill ${audio.running || !audio.enabled ? "ok" : "error"}`;
+  const playback = state.snapshot.playback;
+  const playbackElement = $("playbackStatus");
+  playbackElement.textContent = playback.playing
+    ? `PLAYBACK · ${playback.kind || "轴"} · ${(playback.elapsed_seconds || 0).toFixed(1)} s`
+    : "PLAYBACK · 空闲";
+  playbackElement.className = `status-pill ${playback.playing ? "ok" : "waiting"}`;
   const active = state.snapshot.keyboard.active;
   $("activeSummary").textContent = active.length
     ? `${active.length} 个触发音 · ${active.map((item) => item.frequency_hz.toFixed(1)).join(" / ")} Hz`

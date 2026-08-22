@@ -17,11 +17,11 @@
       <div class="status-stack">
         <div id="midiStatus" class="status-pill waiting">MIDI · 检查中</div>
         <div id="audioStatus" class="status-pill waiting">AUDIO · 检查中</div>
+        <div id="playbackStatus" class="status-pill waiting">PLAYBACK · 空闲</div>
       </div>
     </header>
 
-    <section class="control-strip panel">
-      <section id="layoutPanel" class="layout-control-panel panel" aria-label="布局与演示控制">
+    <section id="layoutPanel" class="layout-control-panel panel" aria-label="布局与演示控制">
         <div class="layout-control-heading"><span class="section-index">WORKSPACE / LAYOUTS</span><span id="layoutPresentationStatus" class="subtle">布局加载中</span></div>
         <div class="layout-scene-controls">
           <label><span>当前布局</span><select id="layoutSceneSelect" aria-label="选择布局"></select></label>
@@ -43,9 +43,7 @@
           <div id="layoutActionHint" class="subtle">动作在进入该布局时按顺序执行，不会自动停止音乐。</div>
         </details>
         <div id="layoutSceneList" class="layout-scene-list" aria-label="布局编排顺序"></div>
-      </section>
       <div class="view-controls">
-        <span>工作区</span>
         <button class="view-toggle active" data-panel="layoutPanel">布局</button>
         <button id="layoutLockButton">解锁布局</button>
         <button id="layoutAlignButton">紧凑对齐</button>
