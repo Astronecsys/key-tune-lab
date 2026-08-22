@@ -1,0 +1,10 @@
+.panel-env/
+.conda-env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+dist/
+build/
+*.egg-info/
+configs/tunings/*.json

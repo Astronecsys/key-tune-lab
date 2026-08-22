@@ -1,0 +1,64 @@
+[
+  {
+    "schema_version": 1,
+    "id": "pythagorean_12",
+    "name": "毕达哥拉斯律 · 12 音生成链",
+    "description": "以纯五度 3/2 连续生律并折回 2:1 等价区间；十二音截取会留下一个狼音程。",
+    "construction": {
+      "kind": "generator_chain",
+      "equave_expression": "2",
+      "generator_expression": "3/2",
+      "degree_count": 12,
+      "chain_start": -5
+    },
+    "reference": {"midi_note": 60, "frequency_hz": 261.625565, "degree": 0},
+    "notation": {},
+    "tags": ["historical", "3-limit", "generator-chain"],
+    "provenance": {
+      "sources": ["https://mtosmt.org/issues/mto.98.4.4/mto.98.4.4.scholtz_essay.html"]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "zarlino_just_diatonic",
+    "name": "文艺复兴五限纯律 · 七声音阶",
+    "description": "用 9/8、10/9 与 16/15 三种相邻步进闭合为 2:1；展示新相邻音程循环构造。",
+    "construction": {
+      "kind": "interval_cycle",
+      "equave_expression": "2",
+      "interval_expressions": ["9/8", "10/9", "16/15", "9/8", "10/9", "9/8", "16/15"]
+    },
+    "reference": {"midi_note": 60, "frequency_hz": 261.625565, "degree": 0},
+    "notation": {},
+    "tags": ["historical", "just-intonation", "5-limit", "interval-cycle"],
+    "provenance": {
+      "sources": ["https://mtosmt.org/issues/mto.06.12.3/mto.06.12.3.duffin_essay.html"]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "53edo",
+    "name": "53 平均律",
+    "description": "将 2:1 等价区间等分为 53 份；可通过 03 映射抽取适合实体键盘的子集。",
+    "construction": {"kind": "equal_division", "equave_expression": "2", "divisions": 53},
+    "reference": {"midi_note": 69, "frequency_hz": 440.0, "degree": 0},
+    "notation": {},
+    "tags": ["historical", "equal-division", "microtonal"],
+    "provenance": {
+      "sources": ["https://huygens-fokker.org/en/tuningsystems/"]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "bohlen_pierce_13",
+    "name": "Bohlen–Pierce · 13 等分三倍频区间",
+    "description": "将 3:1 等价区间等分为 13 份；示范等分生成器并不依赖传统八度。",
+    "construction": {"kind": "equal_division", "equave_expression": "3", "divisions": 13},
+    "reference": {"midi_note": 57, "frequency_hz": 220.0, "degree": 0},
+    "notation": {},
+    "tags": ["alternative", "equal-division", "non-octave", "tritave"],
+    "provenance": {
+      "sources": ["https://pmc.ncbi.nlm.nih.gov/articles/PMC2927013/"]
+    }
+  }
+]

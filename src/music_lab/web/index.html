@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KEY//TUNE LAB</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">MUSIC VISUAL LAB · LIVE INSTRUMENT</div>
+        <h1>KEY<span>//</span>TUNE LAB</h1>
+        <p>让物理琴键只做输入：音高、音色和记谱由你定义。</p>
+      </div>
+      <div class="status-stack">
+        <div id="midiStatus" class="status-pill waiting">MIDI · 检查中</div>
+        <div id="audioStatus" class="status-pill waiting">AUDIO · 检查中</div>
+      </div>
+    </header>
+
+    <section class="control-strip panel">
+      <section id="layoutPanel" class="layout-control-panel" aria-label="布局与演示控制">
+        <div class="layout-control-heading"><span class="section-index">WORKSPACE / LAYOUTS</span><span id="layoutPresentationStatus" class="subtle">布局加载中</span></div>
+        <div class="layout-scene-controls">
+          <label><span>当前布局</span><select id="layoutSceneSelect" aria-label="选择布局"></select></label>
+          <label><span>名称</span><input id="layoutSceneName" maxlength="48" placeholder="布局名称"></label>
+          <label class="layout-duration"><span>停留</span><input id="layoutSceneDuration" type="range" min="2" max="180" step="1" value="12"><output id="layoutSceneDurationValue">12s</output></label>
+          <button id="layoutSceneSave" type="button">另存</button>
+          <button id="layoutSceneUpdate" type="button">更新</button>
+          <button id="layoutSceneDelete" type="button">删除</button>
+          <button id="layoutPresentationPrev" type="button" title="上一个布局">◀</button>
+          <button id="layoutPresentationToggle" type="button" class="primary">开始放映</button>
+          <button id="layoutPresentationNext" type="button" title="下一个布局">▶</button>
+          <button id="layoutSceneUp" type="button" title="上移布局">↑</button>
+          <button id="layoutSceneDown" type="button" title="下移布局">↓</button>
+        </div>
+        <div id="layoutSceneList" class="layout-scene-list" aria-label="布局编排顺序"></div>
+      </section>
+      <div class="view-controls">
+        <span>工作区</span>
+        <button id="layoutLockButton">解锁布局</button>
+        <button id="layoutAlignButton">紧凑对齐</button>
+        <button id="layoutSaveDefaultButton">保存为默认</button>
+        <button id="layoutResetButton">重置布局</button>
+        <button class="view-toggle active" data-panel="timbrePanel">泛音</button>
+        <button class="view-toggle active" data-panel="tuningPanel">律制</button>
+        <button class="view-toggle active" data-panel="mappingPanel">映射</button>
+        <button class="view-toggle active" data-panel="tracksPanel">轨道</button>
+        <button class="view-toggle active" data-panel="pitchIdentityPanel">音高</button>
+        <button class="view-toggle active" data-panel="chordPanel">和弦关系</button>
+        <button class="view-toggle active" data-panel="spectrumPanel">频谱</button>
+        <button class="view-toggle active" data-panel="lissajousPanel">和弦莉萨如</button>
+        <button class="view-toggle active" data-panel="outputPhasePanel">输出相图</button>
+        <button class="view-toggle active" data-panel="keyboardPanel">键盘</button>
+      </div>
+    </section>
+
+    <section class="core-grid">
+      <section id="tuningPanel" class="editor-card tuning-space-panel panel" aria-label="律制空间生成器">
+        <div class="section-heading"><div class="section-index">02 / TUNING SPACE</div><div id="tuningSpaceStatus" class="mono subtle">02 定义音高 · T 与按键由 03 编译</div></div>
+        <div class="tuning-space-top">
+          <div class="tuning-library-control">
+            <label><span>当前空间／预设</span><select id="tuningSelect"></select></label>
+            <button id="tuningLibraryButton" class="compact-button tuning-library-button" type="button" aria-expanded="false" aria-controls="tuningLibraryPopover" title="管理律制定义库">⋯</button>
+            <div id="tuningLibraryPopover" class="tuning-library-popover" hidden>
+              <label><span>定义 ID</span><input id="savedTuningId" maxlength="64" placeholder="my-tuning"></label>
+              <label><span>显示名称</span><input id="savedTuningName" maxlength="64" placeholder="我的律制"></label>
+              <label class="tuning-library-description"><span>说明</span><input id="savedTuningDescription" maxlength="180" placeholder="构造方法与用途"></label>
+              <label class="tuning-overwrite"><input id="overwriteSavedTuning" type="checkbox"><span>覆盖同名用户定义（内置定义永远不可覆盖）</span></label>
+              <div class="saved-tuning-controls"><button id="saveTuningButton">保存当前定义</button><button id="reloadTuningLibraryButton">重载配置目录</button></div>
+            </div>
+          </div>
+          <label><span>自定义构造</span><select id="tuningConstruction"><option value="equal_division">等分</option><option value="generator_chain">生成链</option><option value="interval_cycle">相邻音程循环</option><option value="explicit">显式音级</option><option value="generator_lattice" disabled>开放生成格</option></select></label>
+          <label><span>等价区间 E</span><input id="tuningEquaveExpression" value="2" placeholder="2 / √2 / 3"></label>
+        </div>
+        <div id="equalDivisionFields" class="tuning-construction-fields">
+          <label><span>分度数</span><input id="tuningDivisions" type="number" min="1" max="256" value="12"></label>
+        </div>
+        <div id="generatorChainFields" class="tuning-construction-fields" hidden>
+          <label><span>生成器 g</span><input id="tuningGenerator" value="3/2" placeholder="5^(1/4)"></label>
+          <label><span>音级数</span><input id="tuningDegreeCount" type="number" min="1" max="256" value="12"></label>
+          <label><span>链起点</span><input id="tuningChainStart" type="number" value="-5"></label>
+        </div>
+        <div id="explicitDegreeFields" class="tuning-construction-fields" hidden>
+          <label><span>比例／代数表达式 · 逗号分隔</span><input id="tuningDegreeExpressions" value="1/1, 9/8, 5/4, 4/3, 3/2, 5/3, 15/8"></label>
+        </div>
+        <div id="intervalCycleFields" class="tuning-construction-fields" hidden>
+          <label><span>一整圈相邻音程 · 乘积必须等于 E</span><input id="tuningIntervalExpressions" value="9/8, 10/9, 16/15, 9/8, 10/9, 9/8, 16/15"></label>
+        </div>
+        <div id="tuningSpacePreview" class="tuning-space-preview">
+          <canvas id="tuningSpaceCanvas" aria-label="圆形律制空间与解卷音级尺"></canvas>
+        </div>
+        <div class="editor-action"><button id="applyTuningButton">生成律制空间</button><span id="tuningDescription" class="subtle"></span></div>
+      </section>
+
+      <section id="timbrePanel" class="editor-card harmonic-panel panel" aria-label="泛音编辑器">
+        <div class="section-index">01 / HARMONIC EDITOR</div>
+        <div class="timbre-top">
+          <label><span>音色</span><select id="timbreSelect"></select></label>
+          <button id="timbreLibraryButton" class="compact-button timbre-library-button" type="button" aria-expanded="false" aria-controls="timbreLibraryPopover" title="管理本地音色">⋯</button>
+          <div id="timbreLibraryPopover" class="timbre-library-popover" hidden>
+            <label><span>保存当前音色</span><input id="savedTimbreName" maxlength="32" placeholder="音色名称"></label>
+            <div class="saved-timbre-controls"><button id="saveTimbreButton">保存／更新</button><button id="deleteTimbreButton">删除所选本地音色</button></div>
+          </div>
+        </div>
+        <div id="harmonicEditor" class="harmonic-editor" aria-label="交互式泛音列编辑器"></div>
+        <div class="harmonic-help"><span>左键空白处添加 · 右键泛音删除 · 悬停滚轮调振幅</span><span id="timbreDescription" class="subtle"></span></div>
+      </section>
+
+      <section id="mappingPanel" class="editor-card mapping-panel panel" aria-label="输入与律制映射编译器">
+        <div class="section-index">03 / MAPPING COMPILER</div>
+        <div class="mapping-reference-fields">
+          <label><span>策略</span><select id="mappingMode"></select></label>
+          <label><span>承载 T 的输入节点</span><select id="mappingAnchorNode"></select></label>
+          <label><span>T 对应音级</span><input id="mappingReferenceDegree" type="number" min="0" value="0"></label>
+          <label><span>T · Hz</span><input id="mappingReferenceHz" type="number" min="0.001" step="0.001" value="440"></label>
+        </div>
+        <div id="linearMappingFields" class="mapping-strategy-fields">
+          <label><span>每节点音级步长</span><input id="mappingStep" type="number" min="1" max="256" value="1"></label>
+        </div>
+        <div id="subsetMappingFields" class="mapping-strategy-fields" hidden>
+          <label><span>周期音级索引</span><input id="mappingSubset" placeholder="0,3,7,10,..."></label>
+          <button id="nearestSubsetButton" class="compact-button" type="button">生成最近 12 音</button>
+        </div>
+        <div id="gridMappingFields" class="mapping-strategy-fields" hidden>
+          <label><span>q 轴步数</span><input id="mappingQStep" type="number" value="24"></label>
+          <label><span>r 轴步数</span><input id="mappingRStep" type="number" value="13"></label>
+        </div>
+        <div id="latticeMappingFields" class="mapping-strategy-fields" hidden>
+          <label><span>q 轴比例</span><input id="mappingQRatio" value="3/2"></label>
+          <label><span>r 轴比例</span><input id="mappingRRatio" value="5/4"></label>
+        </div>
+        <div class="mapping-actions">
+          <button id="applyMappingButton">编译映射</button>
+          <label class="master-volume"><span>主音量</span><input id="volumeSlider" type="range" min="0" max="100" value="55"><output id="volumeValue">55%</output></label>
+        </div>
+        <p id="mappingSummary" class="subtle"></p>
+      </section>
+    </section>
+
+    <main class="dashboard">
+      <section id="tracksPanel" class="timeline-card panel workspace-panel" aria-label="多轴乐谱与演奏">
+        <div class="section-heading">
+          <div class="section-index">04 / TRACKS</div>
+          <div class="track-heading-controls">
+            <span class="subtle">每条轴可独立播放与删除 · 新录音自动保留上一条</span>
+            <div class="track-primary-controls">
+              <button id="recordButton" class="primary">● 开始记录</button>
+              <button id="addTrackButton">＋ 添加 MIDI 轴</button>
+            </div>
+          </div>
+        </div>
+        <input id="midiFile" type="file" accept=".mid,.midi,audio/midi" hidden>
+        <div id="tracksContainer" class="tracks-container"></div>
+      </section>
+
+      <aside id="pitchIdentityPanel" class="inspector relation-panel panel workspace-panel" aria-label="音高身份与律制关系">
+        <div class="section-index">05 / PITCH IDENTITY</div>
+        <div class="relation-summary">
+          <span id="tuningReference" class="mono">律制参考 T —</span>
+          <strong id="tuningToneCount">0 音</strong>
+        </div>
+        <div class="relation-block">
+          <div class="relation-matrix tuning-relation-matrix">
+            <div class="relation-matrix-header" aria-hidden="true">
+              <span>音高身份 · Hz</span><span>相对 T · 律制关系</span>
+              <span class="prime-vector prime-vector-header" title="相对律制参考 T 的关系分解"><i>2</i><i>3</i><i>5</i><i>7</i><i>11</i><i>ALG</i></span>
+            </div>
+            <div id="tuningTones" class="relation-tones"><span class="subtle">等待输入</span></div>
+          </div>
+        </div>
+      </aside>
+
+      <aside id="chordPanel" class="inspector relation-panel panel workspace-panel" aria-label="和弦内部关系">
+        <div class="section-index">06 / CHORD RELATION</div>
+        <div class="relation-summary">
+          <span class="relation-summary-text">
+            <span id="chordBasis" class="mono">和弦基准 B —</span>
+            <small id="chordName">等待和弦输入</small>
+          </span>
+          <strong id="chordCount">0 音</strong>
+        </div>
+        <div class="chord-basis-controls">
+          <label><span>B 模式</span><select id="chordBasisMode"><option value="lowest">最低实音</option><option value="selected">选定音高</option><option value="virtual">虚拟 f/T</option><option value="auto_simple">自动 · 最简关系</option><option value="auto_fundamental">自动 · 共同基频</option><option value="auto_composite">自动 · 复合策略</option></select></label>
+          <span id="chordBasisHint">自动取最低实音</span>
+          <div id="virtualBasisControls" class="virtual-basis-controls" hidden>
+            <label><span>虚拟 B · f/T</span><input id="virtualBasisRatio" type="number" min="0.000001" max="1000000" step="any" value="1"></label>
+            <button id="applyVirtualBasis" class="compact-button" type="button">应用</button>
+          </div>
+        </div>
+        <div class="relation-block">
+          <div class="relation-matrix chord-relation-matrix">
+            <div class="relation-matrix-header" aria-hidden="true">
+              <span>音高身份 · Hz</span><span>相对 B · 和弦关系</span>
+              <span class="prime-vector prime-vector-header" title="相对和弦基准 B 的关系分解"><i>2</i><i>3</i><i>5</i><i>7</i><i>11</i><i>ALG</i></span>
+            </div>
+            <div id="chordTones" class="relation-tones"><span class="subtle">等待输入</span></div>
+          </div>
+        </div>
+      </aside>
+
+      <section id="spectrumPanel" class="analysis-card spectrum-panel panel workspace-panel" aria-label="频率与响度">
+        <div class="section-heading"><div class="section-index">07 / LIVE SPECTRUM</div><div id="levelSummary" class="mono subtle">RMS — · PEAK —</div></div>
+        <div class="spectrum-controls" aria-label="频谱显示控制">
+          <label class="signal-toggle"><input id="partialRelationsToggle" type="checkbox" checked> <span>部分音关系</span></label>
+          <label class="signal-toggle"><input id="spectrumHistoryToggle" type="checkbox" checked> <span>历史余辉</span></label>
+          <label class="history-duration" title="热痕亮度衰减到一半所需时间"><span>半衰期</span><input id="historyDuration" type="range" min="1" max="30" step="0.5" value="5"><output id="historyDurationValue">t½ 5.0s</output></label>
+          <label class="history-duration" title="响度和持续时间写入历史曝光的速度"><span>烧录</span><input id="historyBurnGain" type="range" min="0.25" max="4" step="0.25" value="1.5"><output id="historyBurnGainValue">1.50×</output></label>
+          <label class="history-duration" title="背景热痕达到饱和时的最大不透明度"><span>显影</span><input id="historyDepth" type="range" min="0.1" max="0.9" step="0.05" value="0.55"><output id="historyDepthValue">55%</output></label>
+          <button id="clearSpectrumHistory" class="compact-button" type="button">清除余辉</button>
+        </div>
+        <div class="chart-label spectrum-chart-label"><span>FREQUENCY / LOUDNESS · 低频约 2.9 Hz 分辨率</span><span id="spectrumRelationSummary">等待多音输入</span></div>
+        <div class="canvas-wrap signal-wrap"><canvas id="spectrumCanvas" aria-label="实时频率响度频谱"></canvas></div>
+      </section>
+
+      <section id="lissajousPanel" class="analysis-card lissajous-panel panel workspace-panel" aria-label="和弦关系莉萨如">
+        <div class="section-heading"><div class="section-index">08 / CHORD LISSAJOUS</div></div>
+        <div class="phase-controls" aria-label="和弦莉萨如显示控制">
+          <label><span>轨迹长度</span><input id="lissajousTrailLength" type="range" min="-2" max="2" step="0.05" value="0"><output id="lissajousTrailLengthValue">1.00×</output></label>
+          <label><span>漂移</span><input id="lissajousDriftSpeed" type="range" min="-4" max="4" step="0.05" value="0.25"><output id="lissajousDriftSpeedValue">+0.25 周期/s</output></label>
+          <label class="phase-toggle"><input id="lissajousAutoClose" type="checkbox" checked><span>自动闭合</span></label>
+        </div>
+        <div class="chart-label">LISSAJOUS / 分析基准 B × 发声音</div>
+        <div class="canvas-wrap lissajous-wrap"><canvas id="lissajousCanvas" aria-label="和弦音高关系莉萨如图"></canvas></div>
+      </section>
+
+      <section id="outputPhasePanel" class="analysis-card output-phase-panel panel workspace-panel" aria-label="整体输出延迟相图">
+        <div class="section-heading"><div class="section-index">09 / OUTPUT PHASE</div></div>
+        <div class="phase-controls" aria-label="延迟相图显示控制">
+          <label><span>延迟 τ</span><input id="outputPhaseDelay" type="range" min="0.1" max="12" step="0.1" value="1.5"><output id="outputPhaseDelayValue">1.5 ms</output></label>
+        </div>
+        <div class="chart-label">DELAY EMBEDDING / S(t) × S(t−τ)</div>
+        <div class="canvas-wrap output-phase-wrap"><canvas id="outputPhaseCanvas" aria-label="最终合成输出延迟相图"></canvas></div>
+        <div id="outputPhaseSummary" class="lissajous-legend mono">等待合成器输出</div>
+      </section>
+
+      <section id="keyboardPanel" class="keyboard-card panel" aria-label="实体键盘映射结果">
+        <div class="section-heading">
+          <div><div class="section-index">10 / INPUT SURFACE</div><div id="surfaceDescription" class="subtle"></div></div>
+          <div class="surface-heading-controls"><label><span>表面</span><select id="inputSurfaceSelect"></select></label><div id="activeSummary" class="mono subtle">等待输入</div></div>
+        </div>
+        <div class="canvas-wrap keyboard-wrap"><canvas id="keyboardCanvas"></canvas></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

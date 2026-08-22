@@ -1,0 +1,8 @@
+{
+  "name": "key-tune-lab-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/web/*.test.mjs"
+  }
+}

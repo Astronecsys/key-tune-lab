@@ -1,0 +1,125 @@
+[
+  {
+    "schema_version": 1,
+    "id": "12edo",
+    "name": "12 平均律",
+    "description": "将 2:1 等价区间等分为 12 个音级；实体键位由 03 映射决定。",
+    "construction": {"kind": "equal_division", "equave_expression": "2", "divisions": 12},
+    "reference": {"midi_note": 69, "frequency_hz": 440.0, "degree": 0},
+    "notation": {"alias_system": "western_12edo"},
+    "tags": ["equal-division", "western"]
+  },
+  {
+    "schema_version": 1,
+    "id": "19edo",
+    "name": "19 平均律",
+    "description": "将 2:1 等价区间等分为 19 个音级；实体键位由 03 映射决定。",
+    "construction": {"kind": "equal_division", "equave_expression": "2", "divisions": 19},
+    "reference": {"midi_note": 69, "frequency_hz": 440.0, "degree": 0},
+    "notation": {},
+    "tags": ["equal-division"]
+  },
+  {
+    "schema_version": 1,
+    "id": "31edo",
+    "name": "31 平均律",
+    "description": "将 2:1 等价区间等分为 31 个音级；实体键位由 03 映射决定。",
+    "construction": {"kind": "equal_division", "equave_expression": "2", "divisions": 31},
+    "reference": {"midi_note": 69, "frequency_hz": 440.0, "degree": 0},
+    "notation": {},
+    "tags": ["equal-division", "meantone"]
+  },
+  {
+    "schema_version": 1,
+    "id": "41edo",
+    "name": "41 平均律",
+    "description": "将 2:1 等价区间分为 41 份；可由映射编译器抽取钢琴键子集。",
+    "construction": {"kind": "equal_division", "equave_expression": "2", "divisions": 41},
+    "reference": {"midi_note": 69, "frequency_hz": 440.0, "degree": 0},
+    "notation": {},
+    "tags": ["equal-division", "microtonal"]
+  },
+  {
+    "schema_version": 1,
+    "id": "ji5_12",
+    "name": "五限纯律（12 音映射）",
+    "description": "在 2:1 等价区间内截取 12 个五限整数比音级。",
+    "construction": {
+      "kind": "ratio_set",
+      "equave_expression": "2",
+      "degree_expressions": ["1/1", "16/15", "9/8", "6/5", "5/4", "4/3", "45/32", "3/2", "8/5", "5/3", "9/5", "15/8"]
+    },
+    "reference": {"midi_note": 60, "frequency_hz": 261.625565, "degree": 0},
+    "notation": {},
+    "tags": ["just-intonation", "5-limit"]
+  },
+  {
+    "schema_version": 1,
+    "id": "ji7_12",
+    "name": "七限纯律（12 音映射）",
+    "description": "加入第 7 素数关系，包括 7/5 与 7/4。",
+    "construction": {
+      "kind": "ratio_set",
+      "equave_expression": "2",
+      "degree_expressions": ["1/1", "16/15", "9/8", "6/5", "5/4", "4/3", "7/5", "3/2", "8/5", "5/3", "7/4", "15/8"]
+    },
+    "reference": {"midi_note": 60, "frequency_hz": 261.625565, "degree": 0},
+    "notation": {},
+    "tags": ["just-intonation", "7-limit"]
+  },
+  {
+    "schema_version": 1,
+    "id": "ji11_12",
+    "name": "十一限纯律（12 音映射）",
+    "description": "关系分析扩展到 2·3·5·7·11，并包含 11/8 音级。",
+    "construction": {
+      "kind": "ratio_set",
+      "equave_expression": "2",
+      "degree_expressions": ["1/1", "16/15", "9/8", "6/5", "5/4", "4/3", "11/8", "3/2", "8/5", "5/3", "7/4", "15/8"]
+    },
+    "reference": {"midi_note": 60, "frequency_hz": 261.625565, "degree": 0},
+    "notation": {},
+    "tags": ["just-intonation", "11-limit"]
+  },
+  {
+    "schema_version": 1,
+    "id": "sqrt2_12",
+    "name": "12 等分 √2 等价间隔",
+    "description": "把 √2 定义为等价边界，并在其中生成 12 个音级；实体键位由 03 映射决定。",
+    "construction": {"kind": "equal_division", "equave_expression": "√2", "divisions": 12},
+    "reference": {"midi_note": 69, "frequency_hz": 440.0, "degree": 0},
+    "relation_basis": "√2",
+    "notation": {},
+    "tags": ["equal-division", "non-octave", "algebraic"]
+  },
+  {
+    "schema_version": 1,
+    "id": "meantone_quarter_comma",
+    "name": "四分之一音差中庸律 · 12 音生成链",
+    "description": "以 5^(1/4) 为中庸五度生成器，取 12 个生成坐标并折回 2:1 等价区间。",
+    "construction": {
+      "kind": "generator_chain",
+      "equave_expression": "2",
+      "generator_expression": "5^(1/4)",
+      "degree_count": 12,
+      "chain_start": -5
+    },
+    "reference": {"midi_note": 69, "frequency_hz": 440.0, "degree": 0},
+    "notation": {},
+    "tags": ["meantone", "generator-chain", "historical"]
+  },
+  {
+    "schema_version": 1,
+    "id": "ji5_lattice",
+    "name": "五限纯律生成格",
+    "description": "不预先截取 12 音；用 3/2 与 5/4 两个独立方向生成音高。",
+    "construction": {
+      "kind": "generator_lattice",
+      "equave_expression": "2",
+      "basis_expressions": ["3/2", "5/4"]
+    },
+    "reference": {"midi_note": 69, "frequency_hz": 440.0, "degree": 0},
+    "notation": {},
+    "tags": ["just-intonation", "5-limit", "open-lattice"]
+  }
+]
