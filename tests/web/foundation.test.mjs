@@ -26,6 +26,12 @@ import {
   tonesHighToLow,
 } from "../../src/music_lab/web/chord-view.js";
 import { PANEL_MANIFEST } from "../../src/music_lab/web/panel-manifest.js";
+import {
+  loadPresentationDocument,
+  moveScene,
+  nextSceneId,
+  savePresentationDocument,
+} from "../../src/music_lab/web/presentation-layout.js";
 import { delayedPhasePoints } from "../../src/music_lab/web/signal-view.js";
 import {
   createSpectrumMemory,
@@ -159,6 +165,48 @@ test("saved defaults include panel view controls and reset restores them", () =>
     globalThis.document = previousDocument;
     globalThis.window = previousWindow;
   }
+});
+
+test("presentation layouts preserve snapshots and ordered playback", () => {
+  const values = new Map();
+  const storage = {
+    getItem:(key) => values.get(key) ?? null,
+    setItem:(key, value) => values.set(key, value),
+  };
+  const fallback = {
+    name:"工作台",
+    layout:{spectrumPanel:{column:0,row:0,columns:4,rows:4}},
+    viewSettings:{spectrumHistory:true},
+    hiddenPanels:["chordPanel"],
+  };
+  const documentData = loadPresentationDocument(storage, fallback);
+  documentData.scenes.push({
+    id:"second", name:"放映页", durationSeconds:8,
+    layout:{keyboardPanel:{column:0,row:0,columns:8,rows:5}},
+    viewSettings:{spectrumHistory:false}, hiddenPanels:[],
+  });
+  documentData.selectedId = "second";
+  savePresentationDocument(storage, documentData);
+  const restored = loadPresentationDocument(storage, fallback);
+  assert.equal(restored.scenes.length, 2);
+  assert.equal(restored.selectedId, "second");
+  assert.equal(nextSceneId(restored.scenes, "second", 1), restored.scenes[0].id);
+  assert.deepEqual(moveScene(restored.scenes, "second", -1).map((scene) => scene.id), ["second", restored.scenes[0].id]);
+});
+
+test("layout presentation and panel focus controls are available", () => {
+  const html = readFileSync(
+    new URL("../../src/music_lab/web/index.html", import.meta.url),
+    "utf8",
+  );
+  const appSource = readFileSync(
+    new URL("../../src/music_lab/web/app.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(html, /id="layoutSceneSelect"/);
+  assert.match(html, /id="layoutPresentationToggle"/);
+  assert.match(appSource, /initializePresentationLayouts/);
+  assert.match(appSource, /applySnapshot/);
 });
 
 test("every registered panel has a visibility toggle", () => {
