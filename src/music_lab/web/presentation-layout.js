@@ -9,6 +9,9 @@ function sceneId() {
 
 export function normalizeScene(scene, fallback = {}) {
   const candidate = scene && typeof scene === "object" ? scene : {};
+  const actions = Array.isArray(candidate.actions)
+    ? candidate.actions.filter((action) => action && typeof action === "object").map(clone)
+    : Array.isArray(fallback.actions) ? fallback.actions.map(clone) : [];
   return {
     id: String(candidate.id || sceneId()),
     name: String(candidate.name || fallback.name || "未命名布局"),
@@ -18,6 +21,7 @@ export function normalizeScene(scene, fallback = {}) {
     hiddenPanels: Array.isArray(candidate.hiddenPanels)
       ? [...new Set(candidate.hiddenPanels.map(String))]
       : [...new Set(fallback.hiddenPanels || [])],
+    actions,
   };
 }
 

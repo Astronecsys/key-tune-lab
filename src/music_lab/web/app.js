@@ -61,7 +61,7 @@ const state = {
   selectedSavedTimbreName: null,
   chordRenderSignature: null,
   spectrumMemory:createSpectrumMemory(),
-  presentation:{document:null, timer:null, playing:false},
+  presentation:{document:null, timer:null, playing:false, actionEpoch:0},
 };
 
 const panelRegistry = new PanelRegistry({
@@ -260,6 +260,8 @@ function renderPresentationControls() {
   $("layoutSceneName").value = selected?.name || "";
   $("layoutSceneDuration").value = String(selected?.durationSeconds || 12);
   $("layoutSceneDurationValue").textContent = `${selected?.durationSeconds || 12}s`;
+  $("layoutSceneActions").value = JSON.stringify(selected?.actions || [], null, 2);
+  $("layoutActionHint").textContent = `${selected?.actions?.length || 0} 个动作 · 进入布局时按顺序执行`;
   $("layoutPresentationToggle").textContent = state.presentation.playing ? "暂停放映" : "开始放映";
   $("layoutPresentationStatus").textContent = state.presentation.playing
     ? `放映中 · ${selected?.name || "布局"} · 音频保持运行`
@@ -270,17 +272,102 @@ function renderPresentationControls() {
     </button>`).join("");
 }
 
+function parseSceneActions() {
+  const source = $("layoutSceneActions").value.trim();
+  if (!source) return [];
+  let actions;
+  try {
+    actions = JSON.parse(source);
+  } catch (error) {
+    throw new Error(`场景动作 JSON 无法解析：${error.message}`);
+  }
+  if (!Array.isArray(actions) || actions.some((action) => !action || typeof action !== "object" || Array.isArray(action))) {
+    throw new Error("场景动作必须是 JSON 对象数组");
+  }
+  return actions;
+}
+
+const presentationDelay = (seconds) => new Promise((resolve) => {
+  window.setTimeout(resolve, Math.max(0, Math.min(3600, Number(seconds) || 0)) * 1000);
+});
+
+function valueAtPath(root, path) {
+  return String(path || "").split(".").filter(Boolean).reduce(
+    (value, key) => value == null ? undefined : value[key],
+    root,
+  );
+}
+
+async function runSceneActions(scene, epoch) {
+  for (const action of scene.actions || []) {
+    if (epoch !== state.presentation.actionEpoch) return;
+    try {
+      const type = String(action.type || "");
+      if (type === "wait") {
+        await presentationDelay(action.seconds);
+      } else if (type === "focus_panel") {
+        state.freeLayout.focusPanel(action.panel_id || null);
+      } else if (type === "set_panel_visibility") {
+        state.freeLayout.setHiddenPanels(action.hidden_panels || [], {persist:false});
+      } else if (type === "set_view") {
+        state.freeLayout.setViewSettings(action.settings || {}, {persist:false});
+      } else if (type === "clear_spectrum_history") {
+        resetSpectrumMemory();
+        panelRegistry.invalidate("spectrumPanel");
+      } else if (type === "playback_start") {
+        if (!action.track_id) throw new Error("playback_start 缺少 track_id");
+        await api(`/api/playback/${encodeURIComponent(action.track_id)}/start`, {method:"POST"});
+        await refreshState();
+      } else if (type === "playback_stop") {
+        await api("/api/playback/stop", {method:"POST"});
+        await refreshState();
+      } else if (type === "recording_start") {
+        await api("/api/recording/start", {method:"POST"});
+        await refreshState();
+      } else if (type === "recording_stop") {
+        await api("/api/recording/stop", {method:"POST"});
+        await refreshState();
+      } else if (type === "chord_basis") {
+        await api("/api/chord/basis", {
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify(action.payload || action),
+        });
+        await refreshState();
+      } else if (type === "assert_state") {
+        const actual = valueAtPath(state.snapshot, action.path);
+        const expected = Object.prototype.hasOwnProperty.call(action, "equals")
+          ? action.equals
+          : true;
+        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+          throw new Error(`断言失败：${action.path} = ${JSON.stringify(actual)}，预期 ${JSON.stringify(expected)}`);
+        }
+      } else if (type === "toast") {
+        showToast(String(action.message || ""));
+      } else if (type) {
+        throw new Error(`未知场景动作：${type}`);
+      }
+    } catch (error) {
+      showToast(`场景动作失败：${error.message}`);
+      return;
+    }
+  }
+}
+
 function selectPresentationScene(sceneId, { startTimer = state.presentation.playing } = {}) {
   const documentData = state.presentation.document;
   const scene = documentData?.scenes.find((candidate) => candidate.id === sceneId);
   if (!scene || !state.freeLayout) return;
   state.presentation.document.selectedId = scene.id;
+  state.presentation.actionEpoch += 1;
+  const actionEpoch = state.presentation.actionEpoch;
   state.freeLayout.focusPanel(null);
   state.freeLayout.applySnapshot(scene, {persist:false});
   persistPresentation();
   renderPresentationControls();
   if (startTimer) schedulePresentationAdvance();
   panelRegistry.invalidate(Object.keys(scene.layout));
+  void runSceneActions(scene, actionEpoch);
 }
 
 function schedulePresentationAdvance() {
@@ -311,9 +398,11 @@ function initializePresentationLayouts() {
     if (row) selectPresentationScene(row.dataset.sceneId);
   });
   $("layoutSceneSave").addEventListener("click", () => {
+    let actions;
+    try { actions = parseSceneActions(); } catch (error) { showToast(error.message); return; }
     const name = $("layoutSceneName").value.trim() || `布局 ${state.presentation.document.scenes.length + 1}`;
     const snapshot = presentationSnapshot();
-    const scene = {id:`layout-${Date.now().toString(36)}`, name, durationSeconds:Number($("layoutSceneDuration").value), ...snapshot};
+    const scene = {id:`layout-${Date.now().toString(36)}`, name, durationSeconds:Number($("layoutSceneDuration").value), actions, ...snapshot};
     state.presentation.document.scenes.push(scene);
     state.presentation.document.selectedId = scene.id;
     persistPresentation();
@@ -323,9 +412,12 @@ function initializePresentationLayouts() {
   $("layoutSceneUpdate").addEventListener("click", () => {
     const scene = selectedPresentationScene();
     if (!scene) return;
+    let actions;
+    try { actions = parseSceneActions(); } catch (error) { showToast(error.message); return; }
     Object.assign(scene, presentationSnapshot(), {
       name:$("layoutSceneName").value.trim() || scene.name,
       durationSeconds:Number($("layoutSceneDuration").value) || 12,
+      actions,
     });
     persistPresentation();
     renderPresentationControls();
@@ -367,6 +459,19 @@ function initializePresentationLayouts() {
     persistPresentation();
     if (state.presentation.playing) schedulePresentationAdvance();
   });
+  window.KEY_TUNE_PRESENTATION = {
+    getDocument:() => JSON.parse(JSON.stringify(state.presentation.document)),
+    select:(sceneId) => selectPresentationScene(sceneId),
+    start:() => setPresentationPlaying(true),
+    stop:() => setPresentationPlaying(false),
+    setActions:(sceneId, actions) => {
+      const scene = state.presentation.document?.scenes.find((candidate) => candidate.id === sceneId);
+      if (!scene || !Array.isArray(actions)) throw new Error("未知布局或动作不是数组");
+      scene.actions = actions.filter((action) => action && typeof action === "object");
+      persistPresentation();
+      renderPresentationControls();
+    },
+  };
   selectPresentationScene(state.presentation.document.selectedId, {startTimer:false});
 }
 
@@ -1758,6 +1863,7 @@ const renderKeyboardPanel = () => {
 function initializePanelRegistry() {
   panelRegistry
     .register({id:"chrome", render:renderChrome, observeResize:false})
+    .register({id:"layoutPanel", element:$("layoutPanel"), render:() => {}})
     .register({id:"timbrePanel", element:$("timbrePanel"), render:renderTimbrePanel})
     .register({id:"tuningPanel", element:$("tuningPanel"), render:renderTuningPanel})
     .register({id:"mappingPanel", element:$("mappingPanel"), render:renderMappingPanel})

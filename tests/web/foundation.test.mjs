@@ -178,6 +178,7 @@ test("presentation layouts preserve snapshots and ordered playback", () => {
     layout:{spectrumPanel:{column:0,row:0,columns:4,rows:4}},
     viewSettings:{spectrumHistory:true},
     hiddenPanels:["chordPanel"],
+    actions:[{type:"toast", message:"ready"}],
   };
   const documentData = loadPresentationDocument(storage, fallback);
   documentData.scenes.push({
@@ -190,6 +191,7 @@ test("presentation layouts preserve snapshots and ordered playback", () => {
   const restored = loadPresentationDocument(storage, fallback);
   assert.equal(restored.scenes.length, 2);
   assert.equal(restored.selectedId, "second");
+  assert.deepEqual(restored.scenes[0].actions, [{type:"toast", message:"ready"}]);
   assert.equal(nextSceneId(restored.scenes, "second", 1), restored.scenes[0].id);
   assert.deepEqual(moveScene(restored.scenes, "second", -1).map((scene) => scene.id), ["second", restored.scenes[0].id]);
 });

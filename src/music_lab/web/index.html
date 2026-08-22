@@ -21,7 +21,7 @@
     </header>
 
     <section class="control-strip panel">
-      <section id="layoutPanel" class="layout-control-panel" aria-label="布局与演示控制">
+      <section id="layoutPanel" class="layout-control-panel panel" aria-label="布局与演示控制">
         <div class="layout-control-heading"><span class="section-index">WORKSPACE / LAYOUTS</span><span id="layoutPresentationStatus" class="subtle">布局加载中</span></div>
         <div class="layout-scene-controls">
           <label><span>当前布局</span><select id="layoutSceneSelect" aria-label="选择布局"></select></label>
@@ -36,10 +36,17 @@
           <button id="layoutSceneUp" type="button" title="上移布局">↑</button>
           <button id="layoutSceneDown" type="button" title="下移布局">↓</button>
         </div>
+        <details class="layout-actions-editor">
+          <summary>场景动作（JSON，可选）</summary>
+          <textarea id="layoutSceneActions" rows="4" spellcheck="false" placeholder='[{"type":"focus_panel","panel_id":"spectrumPanel"},{"type":"wait","seconds":3}]'></textarea>
+          <div class="layout-action-help">支持：<code>focus_panel</code>、<code>set_panel_visibility</code>、<code>set_view</code>、<code>playback_start/stop</code>、<code>recording_start/stop</code>、<code>clear_spectrum_history</code>、<code>chord_basis</code>、<code>wait</code>、<code>assert_state</code>、<code>toast</code></div>
+          <div id="layoutActionHint" class="subtle">动作在进入该布局时按顺序执行，不会自动停止音乐。</div>
+        </details>
         <div id="layoutSceneList" class="layout-scene-list" aria-label="布局编排顺序"></div>
       </section>
       <div class="view-controls">
         <span>工作区</span>
+        <button class="view-toggle active" data-panel="layoutPanel">布局</button>
         <button id="layoutLockButton">解锁布局</button>
         <button id="layoutAlignButton">紧凑对齐</button>
         <button id="layoutSaveDefaultButton">保存为默认</button>
