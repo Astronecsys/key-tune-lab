@@ -1866,6 +1866,17 @@ const renderKeyboardPanel = () => {
   drawKeyboard();
 };
 
+function renderPanelVisibilityControls(hiddenPanelIds = []) {
+  const hidden = new Set(hiddenPanelIds);
+  const markup = PANEL_MANIFEST.map((panel) => `
+    <button type="button" class="view-toggle${hidden.has(panel.id) ? "" : " active"}" data-panel="${escapeHtml(panel.id)}" aria-pressed="${!hidden.has(panel.id)}">${escapeHtml(panel.label || panel.id)}</button>
+  `).join("");
+  ["layoutPanelToggles", "externalPanelToggles"].forEach((id) => {
+    const container = $(id);
+    if (container) container.innerHTML = markup;
+  });
+}
+
 function initializePanelRegistry() {
   panelRegistry
     .register({id:"chrome", render:renderChrome, observeResize:false})
@@ -1906,16 +1917,10 @@ function initializeFreeLayout() {
     onLayoutChange:(panelIds) => panelRegistry.invalidate(panelIds),
     onDefaultSaved:(mode) => showToast(`已保存${mode === "wide" ? "宽屏" : "紧凑屏"}默认布局`),
     onVisibilityChange:(hiddenPanelIds) => {
-      const hidden = new Set(hiddenPanelIds);
-      document.querySelectorAll(".view-toggle").forEach((button) => {
-        button.classList.toggle("active", !hidden.has(button.dataset.panel));
-      });
+      renderPanelVisibilityControls(hiddenPanelIds);
     },
     getViewSettings:readPanelViewSettings,
     applyViewSettings:applyPanelViewSettings,
-  });
-  document.querySelectorAll(".view-toggle").forEach((button) => {
-    button.classList.toggle("active", state.freeLayout.isPanelVisible(button.dataset.panel));
   });
 }
 
@@ -2351,12 +2356,26 @@ function bindControls() {
       await refreshState();
     }
   });
-  document.querySelectorAll(".view-toggle").forEach((button) => button.addEventListener("click", () => {
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest(".view-toggle");
+    if (!button) return;
     const panel = $(button.dataset.panel);
-    const visible = panel.classList.contains("collapsed");
-    state.freeLayout?.setPanelVisible(panel.id, visible);
-    button.classList.toggle("active", visible);
-  }));
+    if (!panel || !state.freeLayout) return;
+    state.freeLayout.setPanelVisible(panel.id, panel.classList.contains("collapsed"));
+  });
+  const panelVisibilityButton = $("panelVisibilityButton");
+  const panelVisibilityPopover = $("panelVisibilityPopover");
+  panelVisibilityButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const opening = panelVisibilityPopover.hidden;
+    panelVisibilityPopover.hidden = !opening;
+    panelVisibilityButton.setAttribute("aria-expanded", String(opening));
+  });
+  document.addEventListener("click", (event) => {
+    if (event.target.closest(".meta-panel-control")) return;
+    panelVisibilityPopover.hidden = true;
+    panelVisibilityButton.setAttribute("aria-expanded", "false");
+  });
   const keyboardCanvas = $("keyboardCanvas");
   const clearKeyboardHover = () => {
     if (state.hoveredInputId === null) return;

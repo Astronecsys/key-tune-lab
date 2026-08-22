@@ -59,6 +59,7 @@ h1 { margin: 7px 0 2px; font: 750 36px/1 "Segoe UI", sans-serif; letter-spacing:
 h1 span { color: var(--amber); }
 .topbar p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
 
+.meta-header-controls { position: relative; display: flex; align-items: center; gap: 9px; }
 .status-stack { display: flex; gap: 9px; }
 .status-pill {
   border: 1px solid var(--line);
@@ -70,6 +71,14 @@ h1 span { color: var(--amber); }
 }
 .status-pill.ok { border-color: rgba(166,227,161,.45); color: var(--green); }
 .status-pill.error { border-color: rgba(243,139,168,.45); color: var(--red); }
+.meta-panel-control { position: relative; }
+.meta-panel-control > button { min-height: 34px; padding: 0 11px; color: var(--cyan); border-color: rgba(137,220,235,.4); background: var(--cyan-soft); font-size: 11px; }
+.panel-visibility-popover { position: absolute; z-index: 140; top: calc(100% + 8px); right: 0; width: min(310px, calc(100vw - 28px)); padding: 10px; border: 1px solid var(--surface-1); border-radius: 10px; background: var(--panel-2); box-shadow: 0 18px 44px rgba(0,0,0,.55); }
+.panel-visibility-popover[hidden] { display: none; }
+.panel-visibility-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--text); font-size: 12px; }
+.panel-visibility-heading small { color: var(--muted); font-size: 9px; text-align: right; }
+.panel-toggle-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+.panel-toggle-grid .view-toggle { min-height: 28px; padding: 0 8px; font-size: 10px; }
 
 .panel { background: linear-gradient(145deg, rgba(30,30,46,.98), rgba(24,24,37,.98)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 18px 46px rgba(17,17,27,.34); }
 
@@ -252,6 +261,7 @@ h1 { font-size: 31px; }
 .layout-scene-row small { color: var(--mauve); font: 9px "Cascadia Mono", Consolas, monospace; }
 .layout-scene-order { color: var(--overlay); font: 9px "Cascadia Mono", Consolas, monospace; }
 .layout-control-panel .view-controls { justify-content: flex-start; margin: 2px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
+.layout-control-panel .view-controls .panel-toggle-grid { flex: 1 1 100%; }
 .free-workspace > .panel {
   position: relative;
   display: flex;

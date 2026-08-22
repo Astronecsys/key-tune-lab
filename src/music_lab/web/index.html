@@ -14,10 +14,18 @@
         <h1>KEY<span>//</span>TUNE LAB</h1>
         <p>让物理琴键只做输入：音高、音色和记谱由你定义。</p>
       </div>
-      <div class="status-stack">
-        <div id="midiStatus" class="status-pill waiting">MIDI · 检查中</div>
-        <div id="audioStatus" class="status-pill waiting">AUDIO · 检查中</div>
-        <div id="playbackStatus" class="status-pill waiting">PLAYBACK · 空闲</div>
+      <div class="meta-header-controls">
+        <div class="status-stack">
+          <div id="audioStatus" class="status-pill waiting">AUDIO · 检查中</div>
+          <div id="playbackStatus" class="status-pill waiting">PLAYBACK · 空闲</div>
+        </div>
+        <div class="meta-panel-control">
+          <button id="panelVisibilityButton" type="button" aria-expanded="false" aria-controls="panelVisibilityPopover">面板</button>
+          <div id="panelVisibilityPopover" class="panel-visibility-popover" hidden>
+            <div class="panel-visibility-heading"><span>面板显隐</span><small>布局面板关闭后从这里恢复</small></div>
+            <div id="externalPanelToggles" class="panel-toggle-grid" aria-label="全部面板显隐"></div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -44,21 +52,11 @@
         </details>
         <div id="layoutSceneList" class="layout-scene-list" aria-label="布局编排顺序"></div>
       <div class="view-controls">
-        <button class="view-toggle active" data-panel="layoutPanel">布局</button>
         <button id="layoutLockButton">解锁布局</button>
         <button id="layoutAlignButton">紧凑对齐</button>
         <button id="layoutSaveDefaultButton">保存为默认</button>
         <button id="layoutResetButton">重置布局</button>
-        <button class="view-toggle active" data-panel="timbrePanel">泛音</button>
-        <button class="view-toggle active" data-panel="tuningPanel">律制</button>
-        <button class="view-toggle active" data-panel="mappingPanel">映射</button>
-        <button class="view-toggle active" data-panel="tracksPanel">轨道</button>
-        <button class="view-toggle active" data-panel="pitchIdentityPanel">音高</button>
-        <button class="view-toggle active" data-panel="chordPanel">和弦关系</button>
-        <button class="view-toggle active" data-panel="spectrumPanel">频谱</button>
-        <button class="view-toggle active" data-panel="lissajousPanel">和弦莉萨如</button>
-        <button class="view-toggle active" data-panel="outputPhasePanel">输出相图</button>
-        <button class="view-toggle active" data-panel="keyboardPanel">键盘</button>
+        <div id="layoutPanelToggles" class="panel-toggle-grid" aria-label="布局内面板显隐"></div>
       </div>
     </section>
 
@@ -244,7 +242,7 @@
       <section id="keyboardPanel" class="keyboard-card panel" aria-label="实体键盘映射结果">
         <div class="section-heading">
           <div><div class="section-index">10 / INPUT SURFACE</div><div id="surfaceDescription" class="subtle"></div></div>
-          <div class="surface-heading-controls"><label><span>表面</span><select id="inputSurfaceSelect"></select></label><div id="activeSummary" class="mono subtle">等待输入</div></div>
+          <div class="surface-heading-controls"><div id="midiStatus" class="status-pill waiting">MIDI · 检查中</div><label><span>表面</span><select id="inputSurfaceSelect"></select></label><div id="activeSummary" class="mono subtle">等待输入</div></div>
         </div>
         <div class="canvas-wrap keyboard-wrap"><canvas id="keyboardCanvas"></canvas></div>
       </section>

@@ -216,10 +216,18 @@ test("every registered panel has a visibility toggle", () => {
     new URL("../../src/music_lab/web/index.html", import.meta.url),
     "utf8",
   );
-  const toggleIds = [...html.matchAll(/class="view-toggle active" data-panel="([^"]+)"/g)]
-    .map((match) => match[1])
-    .sort();
-  assert.deepEqual(toggleIds, PANEL_MANIFEST.map((panel) => panel.id).sort());
+  const appSource = readFileSync(
+    new URL("../../src/music_lab/web/app.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(html, /id="layoutPanelToggles"/);
+  assert.match(html, /id="externalPanelToggles"/);
+  assert.match(appSource, /PANEL_MANIFEST\.map\(\(panel\) =>/);
+  assert.match(appSource, /renderPanelVisibilityControls/);
+  assert.deepEqual(
+    PANEL_MANIFEST.map((panel) => panel.id).sort(),
+    ["layoutPanel", "timbrePanel", "tuningPanel", "mappingPanel", "tracksPanel", "pitchIdentityPanel", "chordPanel", "spectrumPanel", "lissajousPanel", "outputPhasePanel", "keyboardPanel"].sort(),
+  );
 });
 
 test("global actions live in the panels they control", () => {
@@ -240,6 +248,9 @@ test("global actions live in the panels they control", () => {
   assert.match(tracksPanel, /id="addTrackButton"/);
   assert.match(tracksPanel, /id="midiFile"/);
   assert.match(html, /id="layoutSaveDefaultButton"/);
+  const keyboardPanel = html.slice(html.indexOf('<section id="keyboardPanel"'));
+  assert.match(keyboardPanel, /id="midiStatus"/);
+  assert.doesNotMatch(html.slice(0, html.indexOf('<section id="layoutPanel"')), /id="midiStatus"/);
 });
 
 test("tuning and chord relations use separate, explicit references", () => {
