@@ -37,6 +37,22 @@
 - `WORKSPACE / LAYOUTS` 中可以保存多个命名布局，使用 ↑/↓ 编排顺序。
 - “开始放映”按每个布局自己的停留时间自动切换；切换只改变视图，不停止音乐。
 - 布局快照包含面板位置、显隐状态和频谱/莉萨如等显示参数。
+- 展开“场景动作（JSON）”可以为布局附加烟雾测试式动作；动作在进入布局时按顺序执行。
+
+动作配置示例：
+
+```json
+[
+  {"type":"focus_panel","panel_id":"spectrumPanel"},
+  {"type":"set_view","settings":{"spectrumHistory":true,"spectrumHistorySeconds":12}},
+  {"type":"playback_start","track_id":"track-1"},
+  {"type":"wait","seconds":8},
+  {"type":"assert_state","path":"audio.running","equals":true},
+  {"type":"toast","message":"频谱场景完成"}
+]
+```
+
+当前支持 `focus_panel`、`set_panel_visibility`、`set_view`、`playback_start`、`playback_stop`、`recording_start`、`recording_stop`、`clear_spectrum_history`、`chord_basis`、`wait`、`assert_state` 和 `toast`。浏览器页面也暴露了 `window.KEY_TUNE_PRESENTATION`，可用 `getDocument()`、`select(id)`、`start()`、`stop()`、`setActions(id, actions)` 编排配置。
 
 ## 开发与测试
 
