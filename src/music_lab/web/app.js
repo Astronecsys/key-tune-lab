@@ -13,7 +13,7 @@ import {
   replaceSnapshot,
 } from "./instrument-state.js";
 import { createGridLayoutManager } from "./layout-manager.js";
-import { PANEL_MANIFEST } from "./panel-manifest.js";
+import { DESKTOP_MANIFEST, PANEL_MANIFEST } from "./panel-manifest.js";
 import {
   loadPresentationDocument,
   moveScene,
@@ -229,6 +229,8 @@ function presentationSnapshot() {
     layout:{},
     viewSettings:readPanelViewSettings(),
     hiddenPanels:[],
+    activeDesktop:DESKTOP_MANIFEST[0].id,
+    panelDesktops:Object.fromEntries(PANEL_MANIFEST.map((panel) => [panel.id, panel.desktop])),
   };
 }
 
@@ -307,6 +309,10 @@ async function runSceneActions(scene, epoch) {
         await presentationDelay(action.seconds);
       } else if (type === "focus_panel") {
         state.freeLayout.focusPanel(action.panel_id || null);
+      } else if (type === "switch_desktop") {
+        if (!state.freeLayout.switchDesktop(action.desktop_id)) {
+          throw new Error(`未知桌面：${action.desktop_id}`);
+        }
       } else if (type === "set_panel_visibility") {
         state.freeLayout.setHiddenPanels(action.hidden_panels || [], {persist:false});
       } else if (type === "set_view") {
@@ -471,6 +477,13 @@ function initializePresentationLayouts() {
       persistPresentation();
       renderPresentationControls();
     },
+  };
+  window.KEY_TUNE_DESKTOPS = {
+    list:() => DESKTOP_MANIFEST.map((desktop) => ({...desktop})),
+    active:() => state.freeLayout?.getActiveDesktop() || null,
+    switch:(desktopId) => switchActiveDesktop(desktopId, {announce:false}),
+    assignments:() => state.freeLayout?.getPanelDesktops() || {},
+    movePanel:(panelId, desktopId) => state.freeLayout?.setPanelDesktop(panelId, desktopId) || false,
   };
   selectPresentationScene(state.presentation.document.selectedId, {startTimer:false});
 }
@@ -1843,7 +1856,8 @@ function renderLiveState() {
   ]);
 }
 
-const panelVisible = (panelId) => !$(panelId).classList.contains("collapsed");
+const panelVisible = (panelId) => !$(panelId).classList.contains("collapsed")
+  && !$(panelId).classList.contains("desktop-inactive");
 
 const renderTracksPanel = () => state.snapshot && renderTracks();
 const renderSpectrumPanel = () => state.snapshot && drawSignalAnalysis("spectrumPanel");
@@ -1866,15 +1880,51 @@ const renderKeyboardPanel = () => {
   drawKeyboard();
 };
 
-function renderPanelVisibilityControls(hiddenPanelIds = []) {
+function renderDesktopControls(activeDesktopId, panelDesktops = {}) {
+  const switcher = $("desktopSwitcher");
+  if (switcher) {
+    switcher.innerHTML = DESKTOP_MANIFEST.map((desktop) => `
+      <button type="button" role="tab" class="${desktop.id === activeDesktopId ? "active" : ""}" data-desktop-switch="${escapeHtml(desktop.id)}" aria-selected="${desktop.id === activeDesktopId}" title="${escapeHtml(`${desktop.label} · ${desktop.shortcut}`)}">
+        ${escapeHtml(desktop.shortLabel)}<kbd>${escapeHtml(desktop.shortcut)}</kbd>
+      </button>
+    `).join("");
+  }
+  const activeDesktop = DESKTOP_MANIFEST.find((desktop) => desktop.id === activeDesktopId);
+  if ($("activeDesktopLabel")) {
+    $("activeDesktopLabel").textContent = `${activeDesktop?.label || activeDesktopId} · 可恢复任意面板`;
+  }
+  const assignmentContainer = $("panelDesktopAssignments");
+  if (assignmentContainer) {
+    assignmentContainer.innerHTML = PANEL_MANIFEST.map((panel) => `
+      <label class="panel-desktop-assignment">
+        <span>${escapeHtml(panel.label || panel.id)}</span>
+        <select data-panel-desktop="${escapeHtml(panel.id)}" aria-label="${escapeHtml(`${panel.label || panel.id}所在桌面`)}">
+          ${DESKTOP_MANIFEST.map((desktop) => `<option value="${escapeHtml(desktop.id)}"${panelDesktops[panel.id] === desktop.id ? " selected" : ""}>${escapeHtml(desktop.shortLabel)}</option>`).join("")}
+        </select>
+      </label>
+    `).join("");
+  }
+}
+
+function renderPanelVisibilityControls(hiddenPanelIds = [], panelDesktops = {}, activeDesktopId = DESKTOP_MANIFEST[0].id) {
   const hidden = new Set(hiddenPanelIds);
   const markup = PANEL_MANIFEST.map((panel) => `
-    <button type="button" class="view-toggle${hidden.has(panel.id) ? "" : " active"}" data-panel="${escapeHtml(panel.id)}" aria-pressed="${!hidden.has(panel.id)}">${escapeHtml(panel.label || panel.id)}</button>
+    <button type="button" class="view-toggle${hidden.has(panel.id) ? "" : " active"}${panelDesktops[panel.id] !== activeDesktopId ? " other-desktop" : ""}" data-panel="${escapeHtml(panel.id)}" aria-pressed="${!hidden.has(panel.id)}" title="${escapeHtml(panelDesktops[panel.id] !== activeDesktopId ? "位于另一桌面；从顶栏打开时会切换过去" : "切换面板显隐")}">
+      <span>${escapeHtml(panel.label || panel.id)}</span><small class="panel-desktop-badge">${escapeHtml(DESKTOP_MANIFEST.find((desktop) => desktop.id === panelDesktops[panel.id])?.shortLabel || "D?")}</small>
+    </button>
   `).join("");
   ["layoutPanelToggles", "externalPanelToggles"].forEach((id) => {
     const container = $(id);
     if (container) container.innerHTML = markup;
   });
+  renderDesktopControls(activeDesktopId, panelDesktops);
+}
+
+function switchActiveDesktop(desktopId, {announce = true} = {}) {
+  if (!state.freeLayout?.switchDesktop(desktopId)) return false;
+  const desktop = DESKTOP_MANIFEST.find((candidate) => candidate.id === desktopId);
+  if (announce) showToast(`已切换到${desktop?.label || desktopId}`);
+  return true;
 }
 
 function initializePanelRegistry() {
@@ -1910,14 +1960,23 @@ function initializeFreeLayout() {
   state.freeLayout = createGridLayoutManager({
     workspace,
     panels,
+    desktops:DESKTOP_MANIFEST,
     lockButton:$("layoutLockButton"),
     alignButton:$("layoutAlignButton"),
     saveDefaultButton:$("layoutSaveDefaultButton"),
     resetButton:$("layoutResetButton"),
     onLayoutChange:(panelIds) => panelRegistry.invalidate(panelIds),
     onDefaultSaved:(mode) => showToast(`已保存${mode === "wide" ? "宽屏" : "紧凑屏"}默认布局`),
-    onVisibilityChange:(hiddenPanelIds) => {
-      renderPanelVisibilityControls(hiddenPanelIds);
+    onVisibilityChange:(hiddenPanelIds, panelDesktops, activeDesktopId) => {
+      renderPanelVisibilityControls(hiddenPanelIds, panelDesktops, activeDesktopId);
+    },
+    onDesktopChange:(activeDesktopId, panelDesktops, hiddenPanelIds) => {
+      renderPanelVisibilityControls(hiddenPanelIds, panelDesktops, activeDesktopId);
+      panelRegistry.invalidate(
+        PANEL_MANIFEST
+          .filter((panel) => panelDesktops[panel.id] === activeDesktopId)
+          .map((panel) => panel.id),
+      );
     },
     getViewSettings:readPanelViewSettings,
     applyViewSettings:applyPanelViewSettings,
@@ -2357,11 +2416,38 @@ function bindControls() {
     }
   });
   document.addEventListener("click", (event) => {
+    const desktopButton = event.target.closest("[data-desktop-switch]");
+    if (desktopButton) {
+      switchActiveDesktop(desktopButton.dataset.desktopSwitch);
+      return;
+    }
     const button = event.target.closest(".view-toggle");
     if (!button) return;
     const panel = $(button.dataset.panel);
     if (!panel || !state.freeLayout) return;
+    const panelDesktop = state.freeLayout.getPanelDesktop(panel.id);
+    if (button.closest("#externalPanelToggles") && panelDesktop !== state.freeLayout.getActiveDesktop()) {
+      state.freeLayout.setPanelVisible(panel.id, true);
+      switchActiveDesktop(panelDesktop);
+      return;
+    }
     state.freeLayout.setPanelVisible(panel.id, panel.classList.contains("collapsed"));
+  });
+  $("panelDesktopAssignments").addEventListener("change", (event) => {
+    const select = event.target.closest("[data-panel-desktop]");
+    if (!select || !state.freeLayout) return;
+    const panel = PANEL_MANIFEST.find((candidate) => candidate.id === select.dataset.panelDesktop);
+    if (!state.freeLayout.setPanelDesktop(select.dataset.panelDesktop, select.value)) return;
+    const desktop = DESKTOP_MANIFEST.find((candidate) => candidate.id === select.value);
+    showToast(`${panel?.label || select.dataset.panelDesktop}已移到${desktop?.label || select.value}`);
+  });
+  window.addEventListener("keydown", (event) => {
+    if (!event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+    const index = event.code === "Digit1" ? 0 : event.code === "Digit2" ? 1 : -1;
+    const desktop = DESKTOP_MANIFEST[index];
+    if (!desktop) return;
+    event.preventDefault();
+    switchActiveDesktop(desktop.id);
   });
   const panelVisibilityButton = $("panelVisibilityButton");
   const panelVisibilityPopover = $("panelVisibilityPopover");

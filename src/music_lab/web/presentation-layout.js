@@ -1,5 +1,5 @@
 export const PRESENTATION_STORAGE_KEY = "music-lab-presentation-layouts-v1";
-export const PRESENTATION_SCHEMA_VERSION = 1;
+export const PRESENTATION_SCHEMA_VERSION = 2;
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
@@ -21,6 +21,8 @@ export function normalizeScene(scene, fallback = {}) {
     hiddenPanels: Array.isArray(candidate.hiddenPanels)
       ? [...new Set(candidate.hiddenPanels.map(String))]
       : [...new Set(fallback.hiddenPanels || [])],
+    activeDesktop: String(candidate.activeDesktop || fallback.activeDesktop || "desktop1"),
+    panelDesktops: clone(candidate.panelDesktops || fallback.panelDesktops || {}),
     actions,
   };
 }

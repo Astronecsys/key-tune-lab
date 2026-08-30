@@ -15,6 +15,7 @@
         <p>让物理琴键只做输入：音高、音色和记谱由你定义。</p>
       </div>
       <div class="meta-header-controls">
+        <div id="desktopSwitcher" class="desktop-switcher" role="tablist" aria-label="桌面切换"></div>
         <div class="status-stack">
           <div id="audioStatus" class="status-pill waiting">AUDIO · 检查中</div>
           <div id="playbackStatus" class="status-pill waiting">PLAYBACK · 空闲</div>
@@ -22,7 +23,7 @@
         <div class="meta-panel-control">
           <button id="panelVisibilityButton" type="button" aria-expanded="false" aria-controls="panelVisibilityPopover">面板</button>
           <div id="panelVisibilityPopover" class="panel-visibility-popover" hidden>
-            <div class="panel-visibility-heading"><span>面板显隐</span><small>布局面板关闭后从这里恢复</small></div>
+            <div class="panel-visibility-heading"><span>面板显隐</span><small id="activeDesktopLabel">桌面加载中</small></div>
             <div id="externalPanelToggles" class="panel-toggle-grid" aria-label="全部面板显隐"></div>
           </div>
         </div>
@@ -47,7 +48,7 @@
         <details class="layout-actions-editor">
           <summary>场景动作（JSON，可选）</summary>
           <textarea id="layoutSceneActions" rows="4" spellcheck="false" placeholder='[{"type":"focus_panel","panel_id":"spectrumPanel"},{"type":"wait","seconds":3}]'></textarea>
-          <div class="layout-action-help">支持：<code>focus_panel</code>、<code>set_panel_visibility</code>、<code>set_view</code>、<code>playback_start/stop</code>、<code>recording_start/stop</code>、<code>clear_spectrum_history</code>、<code>chord_basis</code>、<code>wait</code>、<code>assert_state</code>、<code>toast</code></div>
+          <div class="layout-action-help">支持：<code>switch_desktop</code>、<code>focus_panel</code>、<code>set_panel_visibility</code>、<code>set_view</code>、<code>playback_start/stop</code>、<code>recording_start/stop</code>、<code>clear_spectrum_history</code>、<code>chord_basis</code>、<code>wait</code>、<code>assert_state</code>、<code>toast</code></div>
           <div id="layoutActionHint" class="subtle">动作在进入该布局时按顺序执行，不会自动停止音乐。</div>
         </details>
         <div id="layoutSceneList" class="layout-scene-list" aria-label="布局编排顺序"></div>
@@ -58,6 +59,10 @@
         <button id="layoutResetButton">重置布局</button>
         <div id="layoutPanelToggles" class="panel-toggle-grid" aria-label="布局内面板显隐"></div>
       </div>
+      <details class="desktop-assignment-editor">
+        <summary>面板桌面分配</summary>
+        <div id="panelDesktopAssignments" class="panel-desktop-assignments" aria-label="面板桌面分配"></div>
+      </details>
     </section>
 
     <section class="core-grid">

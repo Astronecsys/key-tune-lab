@@ -60,6 +60,10 @@ h1 span { color: var(--amber); }
 .topbar p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
 
 .meta-header-controls { position: relative; display: flex; align-items: center; gap: 9px; }
+.desktop-switcher { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-2); }
+.desktop-switcher button { min-height: 28px; padding: 0 8px; border-color: transparent; background: transparent; color: var(--muted); font: 700 10px "Cascadia Mono", Consolas, monospace; }
+.desktop-switcher button.active { color: var(--mauve); border-color: rgba(203,166,247,.45); background: rgba(203,166,247,.14); }
+.desktop-switcher button kbd { margin-left: 4px; color: var(--overlay); font: 8px "Cascadia Mono", Consolas, monospace; }
 .status-stack { display: flex; gap: 9px; }
 .status-pill {
   border: 1px solid var(--line);
@@ -78,7 +82,9 @@ h1 span { color: var(--amber); }
 .panel-visibility-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; color: var(--text); font-size: 12px; }
 .panel-visibility-heading small { color: var(--muted); font-size: 9px; text-align: right; }
 .panel-toggle-grid { display: flex; flex-wrap: wrap; gap: 5px; }
-.panel-toggle-grid .view-toggle { min-height: 28px; padding: 0 8px; font-size: 10px; }
+.panel-toggle-grid .view-toggle { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 0 8px; font-size: 10px; }
+.panel-desktop-badge { color: var(--overlay); font: 8px "Cascadia Mono", Consolas, monospace; }
+.view-toggle.active .panel-desktop-badge { color: var(--mauve); }
 
 .panel { background: linear-gradient(145deg, rgba(30,30,46,.98), rgba(24,24,37,.98)); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 18px 46px rgba(17,17,27,.34); }
 
@@ -262,6 +268,12 @@ h1 { font-size: 31px; }
 .layout-scene-order { color: var(--overlay); font: 9px "Cascadia Mono", Consolas, monospace; }
 .layout-control-panel .view-controls { justify-content: flex-start; margin: 2px 0 0; padding-top: 8px; border-top: 1px solid var(--line); }
 .layout-control-panel .view-controls .panel-toggle-grid { flex: 1 1 100%; }
+.desktop-assignment-editor { border-top: 1px solid var(--line); padding-top: 6px; }
+.desktop-assignment-editor summary { color: var(--muted); cursor: pointer; font-size: 10px; }
+.panel-desktop-assignments { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 5px; margin-top: 7px; }
+.panel-desktop-assignment { display: grid; grid-template-columns: minmax(0, 1fr) 76px; align-items: center; gap: 6px; }
+.panel-desktop-assignment > span { overflow: hidden; color: var(--muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.panel-desktop-assignment select { height: 27px; padding: 0 6px; font-size: 9px; }
 .free-workspace > .panel {
   position: relative;
   display: flex;
@@ -272,6 +284,7 @@ h1 { font-size: 31px; }
   margin: 0;
   overflow: auto;
 }
+.free-workspace > .panel.desktop-inactive { display: none !important; }
 .panel-drag-handle { position: absolute; z-index: 8; top: 5px; right: 31px; width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 6px; color: var(--overlay); cursor: grab; user-select: none; touch-action: none; }
 .panel-focus-button { position: absolute; z-index: 8; top: 5px; right: 57px; min-height: 24px; padding: 0 6px; border: 1px solid transparent; border-radius: 6px; color: var(--overlay); background: transparent; font-size: 9px; }
 .panel-focus-button:hover { color: var(--cyan); border-color: rgba(137,220,235,.3); background: rgba(137,220,235,.08); transform: none; }

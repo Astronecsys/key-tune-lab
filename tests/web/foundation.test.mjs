@@ -9,7 +9,9 @@ import {
   fitLayout,
   LAYOUT_SCHEMA_VERSION,
   LAYOUT_STORAGE_KEY,
+  normalizePanelDesktops,
   overlappingPairs,
+  repairDesktopLayouts,
   repairLayout,
   resolveLayoutWithAnchor,
 } from "../../src/music_lab/web/layout-manager.js";
@@ -25,7 +27,7 @@ import {
   relationshipColumns,
   tonesHighToLow,
 } from "../../src/music_lab/web/chord-view.js";
-import { PANEL_MANIFEST } from "../../src/music_lab/web/panel-manifest.js";
+import { DESKTOP_MANIFEST, PANEL_MANIFEST } from "../../src/music_lab/web/panel-manifest.js";
 import {
   loadPresentationDocument,
   moveScene,
@@ -47,11 +49,22 @@ const panels = [
 ];
 
 test("compact and wide panel manifests are collision-free and respect minimums", () => {
+  const desktopIds = DESKTOP_MANIFEST.map((desktop) => desktop.id);
+  const assignments = normalizePanelDesktops(PANEL_MANIFEST, {}, desktopIds);
   for (const [mode, columnCount] of [["compact", 12], ["wide", 24]]) {
     const layout = Object.fromEntries(
       PANEL_MANIFEST.map((panel) => [panel.id, panel.layouts[mode]]),
     );
-    assert.deepEqual(overlappingPairs(layout), [], `${mode} layout overlaps`);
+    DESKTOP_MANIFEST.forEach((desktop) => {
+      const desktopLayout = Object.fromEntries(
+        Object.entries(layout).filter(([panelId]) => assignments[panelId] === desktop.id),
+      );
+      assert.deepEqual(
+        overlappingPairs(desktopLayout),
+        [],
+        `${mode} ${desktop.id} layout overlaps`,
+      );
+    });
     PANEL_MANIFEST.forEach((panel) => {
       const item = layout[panel.id];
       assert.ok(item.columns >= panel.minColumns);
@@ -59,6 +72,24 @@ test("compact and wide panel manifests are collision-free and respect minimums",
       assert.ok(item.column + item.columns <= columnCount);
     });
   }
+});
+
+test("layout panel defaults to desktop two while instrument panels remain on desktop one", () => {
+  const desktopIds = DESKTOP_MANIFEST.map((desktop) => desktop.id);
+  const assignments = normalizePanelDesktops(PANEL_MANIFEST, {}, desktopIds);
+  assert.equal(assignments.layoutPanel, "desktop2");
+  PANEL_MANIFEST.filter((panel) => panel.id !== "layoutPanel").forEach((panel) => {
+    assert.equal(assignments[panel.id], "desktop1");
+  });
+  const repaired = repairDesktopLayouts(
+    Object.fromEntries(PANEL_MANIFEST.map((panel) => [panel.id, panel.layouts.wide])),
+    PANEL_MANIFEST.map((panel) => ({...panel, defaults:panel.layouts.wide})),
+    assignments,
+    desktopIds,
+    24,
+  );
+  assert.equal(repaired.layoutPanel.row, 0);
+  assert.equal(repaired.timbrePanel.row, 0);
 });
 
 test("mapping compiler has room for independent reference and strategy controls", () => {
@@ -94,6 +125,7 @@ test("saved defaults include panel view controls and reset restores them", () =>
         add:(name) => classes.add(name),
         remove:(name) => classes.delete(name),
         toggle:(name, enabled) => enabled ? classes.add(name) : classes.delete(name),
+        contains:(name) => classes.has(name),
       },
       append() {},
       addEventListener(type, listener) {
@@ -133,6 +165,7 @@ test("saved defaults include panel view controls and reset restores them", () =>
     const manager = createGridLayoutManager({
       workspace,
       panels:[panel],
+      desktops:[{id:"desktop1"}, {id:"desktop2"}],
       lockButton:makeTarget(),
       alignButton:makeTarget(),
       saveDefaultButton:makeTarget(),
@@ -145,10 +178,14 @@ test("saved defaults include panel view controls and reset restores them", () =>
     viewSettings = {trailExponent:1.25, drift:-2.5, autoClose:false};
     manager.saveViewSettings();
     manager.setPanelVisible("a", false);
+    manager.setPanelDesktop("a", "desktop2");
+    manager.switchDesktop("desktop2");
     manager.saveAsDefault();
     viewSettings = {trailExponent:-1, drift:3.5, autoClose:true};
     manager.saveViewSettings();
     manager.setPanelVisible("a", true);
+    manager.setPanelDesktop("a", "desktop1");
+    manager.switchDesktop("desktop1");
     resetButton.dispatch("click");
 
     assert.deepEqual(
@@ -160,7 +197,11 @@ test("saved defaults include panel view controls and reset restores them", () =>
     assert.deepEqual(saved.view_settings.wide, viewSettings);
     assert.deepEqual(saved.user_default_view_settings.wide, viewSettings);
     assert.deepEqual(saved.user_default_hidden_panels.wide, ["a"]);
+    assert.equal(saved.user_default_panel_desktops.a, "desktop2");
+    assert.equal(saved.user_default_active_desktop, "desktop2");
     assert.equal(manager.isPanelVisible("a"), false);
+    assert.equal(manager.getPanelDesktop("a"), "desktop2");
+    assert.equal(manager.getActiveDesktop(), "desktop2");
   } finally {
     globalThis.document = previousDocument;
     globalThis.window = previousWindow;
@@ -178,6 +219,8 @@ test("presentation layouts preserve snapshots and ordered playback", () => {
     layout:{spectrumPanel:{column:0,row:0,columns:4,rows:4}},
     viewSettings:{spectrumHistory:true},
     hiddenPanels:["chordPanel"],
+    activeDesktop:"desktop2",
+    panelDesktops:{layoutPanel:"desktop2", spectrumPanel:"desktop1"},
     actions:[{type:"toast", message:"ready"}],
   };
   const documentData = loadPresentationDocument(storage, fallback);
@@ -191,6 +234,8 @@ test("presentation layouts preserve snapshots and ordered playback", () => {
   const restored = loadPresentationDocument(storage, fallback);
   assert.equal(restored.scenes.length, 2);
   assert.equal(restored.selectedId, "second");
+  assert.equal(restored.scenes[0].activeDesktop, "desktop2");
+  assert.equal(restored.scenes[0].panelDesktops.layoutPanel, "desktop2");
   assert.deepEqual(restored.scenes[0].actions, [{type:"toast", message:"ready"}]);
   assert.equal(nextSceneId(restored.scenes, "second", 1), restored.scenes[0].id);
   assert.deepEqual(moveScene(restored.scenes, "second", -1).map((scene) => scene.id), ["second", restored.scenes[0].id]);
@@ -207,8 +252,13 @@ test("layout presentation and panel focus controls are available", () => {
   );
   assert.match(html, /id="layoutSceneSelect"/);
   assert.match(html, /id="layoutPresentationToggle"/);
+  assert.match(html, /id="desktopSwitcher"/);
+  assert.match(html, /id="panelDesktopAssignments"/);
+  assert.match(html, /switch_desktop/);
   assert.match(appSource, /initializePresentationLayouts/);
   assert.match(appSource, /applySnapshot/);
+  assert.match(appSource, /event\.code === "Digit1"/);
+  assert.match(appSource, /event\.code === "Digit2"/);
 });
 
 test("every registered panel has a visibility toggle", () => {

@@ -33,6 +33,9 @@
 
 ## 布局与放映
 
+- 工作台有两个独立桌面：`D1 演奏桌面`默认容纳乐器与可视化面板，`D2 布局桌面`默认容纳布局控制面板。
+- 顶栏可以点击 `D1` / `D2` 切换；键盘快捷键是 `Alt+1` / `Alt+2`。切换桌面不会重建音频、MIDI 或播放状态。
+- 在布局面板展开“面板桌面分配”，可以把任意面板移动到任一桌面；位置与归属都会保存在浏览器中。
 - 每个面板右上角的“全屏”按钮会暂时隐藏其他面板；按 `Esc` 退出，不影响 MIDI、音频和播放轴。
 - `WORKSPACE / LAYOUTS` 中可以保存多个命名布局，使用 ↑/↓ 编排顺序。
 - “开始放映”按每个布局自己的停留时间自动切换；切换只改变视图，不停止音乐。
@@ -43,6 +46,7 @@
 
 ```json
 [
+  {"type":"switch_desktop","desktop_id":"desktop1"},
   {"type":"focus_panel","panel_id":"spectrumPanel"},
   {"type":"set_view","settings":{"spectrumHistory":true,"spectrumHistorySeconds":12}},
   {"type":"playback_start","track_id":"track-1"},
@@ -52,7 +56,7 @@
 ]
 ```
 
-当前支持 `focus_panel`、`set_panel_visibility`、`set_view`、`playback_start`、`playback_stop`、`recording_start`、`recording_stop`、`clear_spectrum_history`、`chord_basis`、`wait`、`assert_state` 和 `toast`。浏览器页面也暴露了 `window.KEY_TUNE_PRESENTATION`，可用 `getDocument()`、`select(id)`、`start()`、`stop()`、`setActions(id, actions)` 编排配置。
+当前支持 `switch_desktop`、`focus_panel`、`set_panel_visibility`、`set_view`、`playback_start`、`playback_stop`、`recording_start`、`recording_stop`、`clear_spectrum_history`、`chord_basis`、`wait`、`assert_state` 和 `toast`。浏览器页面也暴露了 `window.KEY_TUNE_PRESENTATION`，可用 `getDocument()`、`select(id)`、`start()`、`stop()`、`setActions(id, actions)` 编排配置；`window.KEY_TUNE_DESKTOPS` 提供 `list()`、`active()`、`switch(id)`、`assignments()` 与 `movePanel(panelId, desktopId)`。
 
 ## 开发与测试
 

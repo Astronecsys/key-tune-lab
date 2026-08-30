@@ -1,4 +1,4 @@
-export const LAYOUT_SCHEMA_VERSION = 3;
+export const LAYOUT_SCHEMA_VERSION = 4;
 export const LAYOUT_STORAGE_KEY = "music-lab-grid-layout-v1";
 export const LEGACY_LAYOUT_STORAGE_KEY = "music-lab-free-layout-v4";
 
@@ -10,6 +10,45 @@ const cloneLayout = (layout) => Object.fromEntries(
 );
 
 const cloneViewSettings = (settings = {}) => ({ ...settings });
+
+const cloneAssignments = (assignments = {}) => ({ ...assignments });
+
+export function normalizePanelDesktops(panels, assignments = {}, desktopIds = ["desktop1"]) {
+  const fallbackDesktop = desktopIds[0];
+  return Object.fromEntries(panels.map((panel) => {
+    const requested = assignments[panel.id] || panel.desktop || fallbackDesktop;
+    return [panel.id, desktopIds.includes(requested) ? requested : fallbackDesktop];
+  }));
+}
+
+function panelsOnDesktop(panels, assignments, desktopId) {
+  return panels.filter((panel) => assignments[panel.id] === desktopId);
+}
+
+export function repairDesktopLayouts(layout, panels, assignments, desktopIds, columnCount) {
+  const repaired = {};
+  desktopIds.forEach((desktopId) => {
+    Object.assign(
+      repaired,
+      repairLayout(layout, panelsOnDesktop(panels, assignments, desktopId), columnCount),
+    );
+  });
+  return repaired;
+}
+
+export function normalizeDesktopOrigins(layout, panels, assignments, desktopIds) {
+  const normalized = cloneLayout(layout);
+  desktopIds.forEach((desktopId) => {
+    const panelIds = panelsOnDesktop(panels, assignments, desktopId)
+      .map((panel) => panel.id)
+      .filter((panelId) => normalized[panelId]);
+    if (!panelIds.length) return;
+    const firstRow = Math.min(...panelIds.map((panelId) => normalized[panelId].row));
+    if (firstRow <= 0) return;
+    panelIds.forEach((panelId) => { normalized[panelId].row -= firstRow; });
+  });
+  return normalized;
+}
 
 export function layoutItemsOverlap(first, second) {
   return first.column < second.column + second.columns
@@ -131,7 +170,14 @@ export function fitLayout(layout, panels, columnCount) {
   return compactLayout(fitted, panels, columnCount);
 }
 
-export function convertLegacyLayout(legacy, panels, columnCount, workspaceWidth) {
+export function convertLegacyLayout(
+  legacy,
+  panels,
+  columnCount,
+  workspaceWidth,
+  panelDesktops = null,
+  desktopIds = [],
+) {
   const columnStride = (workspaceWidth + GAP_PX) / columnCount;
   const rowStride = ROW_HEIGHT_PX + GAP_PX;
   const converted = {};
@@ -145,7 +191,9 @@ export function convertLegacyLayout(legacy, panels, columnCount, workspaceWidth)
       rows: Math.round((Number(old.h || 0) + GAP_PX) / rowStride),
     };
   });
-  return repairLayout(converted, panels, columnCount);
+  return panelDesktops && desktopIds.length
+    ? repairDesktopLayouts(converted, panels, panelDesktops, desktopIds, columnCount)
+    : repairLayout(converted, panels, columnCount);
 }
 
 function readJson(storage, key) {
@@ -159,6 +207,7 @@ function readJson(storage, key) {
 export function createGridLayoutManager({
   workspace,
   panels,
+  desktops = [{id:"desktop1", label:"桌面 1"}],
   lockButton,
   alignButton,
   saveDefaultButton,
@@ -170,19 +219,27 @@ export function createGridLayoutManager({
   getViewSettings = () => ({}),
   applyViewSettings = () => {},
   onFocusChange = () => {},
+  onDesktopChange = () => {},
 }) {
   let unlocked = false;
   let currentMode = workspace.clientWidth >= 1600 ? "wide" : "compact";
   let currentColumns = currentMode === "wide" ? 24 : 12;
+  const desktopIds = desktops.map((desktop) => desktop.id);
+  const builtInPanelDesktops = normalizePanelDesktops(panels, {}, desktopIds);
   const manifestsForMode = (mode) => panels.map((panel) => ({
     ...panel,
     defaults: panel.layouts[mode],
   }));
+  const manifestsForDesktopMode = (desktopId, mode = currentMode) => panelsOnDesktop(
+    manifestsForMode(mode),
+    panelDesktopIds,
+    desktopId,
+  );
   const defaultsForMode = (mode) => Object.fromEntries(
     manifestsForMode(mode).map((panel) => [panel.id, { ...panel.defaults }]),
   );
   const savedDocument = readJson(storage, LAYOUT_STORAGE_KEY);
-  const supportedSavedDocument = [1, 2, LAYOUT_SCHEMA_VERSION].includes(
+  const supportedSavedDocument = [1, 2, 3, LAYOUT_SCHEMA_VERSION].includes(
     savedDocument?.version,
   );
   const savedModes = supportedSavedDocument
@@ -200,6 +257,26 @@ export function createGridLayoutManager({
   const userDefaultHiddenPanels = supportedSavedDocument
     ? { ...(savedDocument.user_default_hidden_panels || {}) }
     : {};
+  let panelDesktopIds = normalizePanelDesktops(
+    panels,
+    supportedSavedDocument && savedDocument.version >= 4
+      ? savedDocument.panel_desktops
+      : builtInPanelDesktops,
+    desktopIds,
+  );
+  let userDefaultPanelDesktops = normalizePanelDesktops(
+    panels,
+    supportedSavedDocument && savedDocument.version >= 4
+      ? savedDocument.user_default_panel_desktops || builtInPanelDesktops
+      : builtInPanelDesktops,
+    desktopIds,
+  );
+  let userDefaultActiveDesktop = desktopIds.includes(savedDocument?.user_default_active_desktop)
+    ? savedDocument.user_default_active_desktop
+    : desktopIds[0];
+  let activeDesktopId = desktopIds.includes(savedDocument?.active_desktop)
+    ? savedDocument.active_desktop
+    : desktopIds[0];
   const builtInViewSettings = cloneViewSettings(getViewSettings());
   const hiddenPanelIds = new Set(
     supportedSavedDocument
@@ -211,17 +288,41 @@ export function createGridLayoutManager({
   if (savedDocument?.version === 1) {
     for (const [mode, columnCount] of [["compact", 12], ["wide", 24]]) {
       if (savedModes[mode]) {
-        savedModes[mode] = fitLayout(
-          savedModes[mode],
+        const fitted = {};
+        desktopIds.forEach((desktopId) => Object.assign(
+          fitted,
+          fitLayout(savedModes[mode], manifestsForDesktopMode(desktopId, mode), columnCount),
+        ));
+        savedModes[mode] = fitted;
+      }
+      if (userDefaults[mode]) {
+        const fitted = {};
+        desktopIds.forEach((desktopId) => Object.assign(
+          fitted,
+          fitLayout(userDefaults[mode], manifestsForDesktopMode(desktopId, mode), columnCount),
+        ));
+        userDefaults[mode] = fitted;
+      }
+    }
+  }
+
+  if (supportedSavedDocument && savedDocument.version < 4) {
+    for (const mode of ["compact", "wide"]) {
+      const columnCount = mode === "wide" ? 24 : 12;
+      if (savedModes[mode]) {
+        savedModes[mode] = normalizeDesktopOrigins(
+          repairDesktopLayouts(savedModes[mode], manifestsForMode(mode), panelDesktopIds, desktopIds, columnCount),
           manifestsForMode(mode),
-          columnCount,
+          panelDesktopIds,
+          desktopIds,
         );
       }
       if (userDefaults[mode]) {
-        userDefaults[mode] = fitLayout(
-          userDefaults[mode],
+        userDefaults[mode] = normalizeDesktopOrigins(
+          repairDesktopLayouts(userDefaults[mode], manifestsForMode(mode), panelDesktopIds, desktopIds, columnCount),
           manifestsForMode(mode),
-          columnCount,
+          panelDesktopIds,
+          desktopIds,
         );
       }
     }
@@ -235,13 +336,17 @@ export function createGridLayoutManager({
         manifestsForMode(currentMode),
         currentColumns,
         workspace.clientWidth,
+        panelDesktopIds,
+        desktopIds,
       );
     }
   }
 
-  let currentLayout = repairLayout(
+  let currentLayout = repairDesktopLayouts(
     savedModes[currentMode] || userDefaults[currentMode] || defaultsForMode(currentMode),
     manifestsForMode(currentMode),
+    panelDesktopIds,
+    desktopIds,
     currentColumns,
   );
 
@@ -263,6 +368,10 @@ export function createGridLayoutManager({
     captureViewSettings();
     storage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify({
       version: LAYOUT_SCHEMA_VERSION,
+      active_desktop: activeDesktopId,
+      user_default_active_desktop: userDefaultActiveDesktop,
+      panel_desktops: cloneAssignments(panelDesktopIds),
+      user_default_panel_desktops: cloneAssignments(userDefaultPanelDesktops),
       modes: savedModes,
       user_defaults: userDefaults,
       view_settings: savedViewSettings,
@@ -276,18 +385,40 @@ export function createGridLayoutManager({
     currentLayout = cloneLayout(layout);
     workspace.style.setProperty("--layout-columns", currentColumns);
     workspace.style.setProperty("--layout-row-height", `${ROW_HEIGHT_PX}px`);
+    workspace.dataset ||= {};
+    workspace.dataset.activeDesktop = activeDesktopId;
     panels.forEach((panel) => {
       const item = currentLayout[panel.id];
+      if (!item) return;
       panel.element.style.left = "";
       panel.element.style.top = "";
       panel.element.style.width = "";
       panel.element.style.height = "";
       panel.element.style.gridColumn = `${item.column + 1} / span ${item.columns}`;
       panel.element.style.gridRow = `${item.row + 1} / span ${item.rows}`;
+      panel.element.dataset ||= {};
+      panel.element.dataset.desktop = panelDesktopIds[panel.id];
+      panel.element.classList.toggle(
+        "desktop-inactive",
+        panelDesktopIds[panel.id] !== activeDesktopId,
+      );
     });
-    const rows = Math.max(...Object.values(currentLayout).map((item) => item.row + item.rows));
+    const activePanelIds = panelsOnDesktop(panels, panelDesktopIds, activeDesktopId)
+      .map((panel) => panel.id);
+    const rows = Math.max(
+      1,
+      ...activePanelIds
+        .map((panelId) => currentLayout[panelId])
+        .filter(Boolean)
+        .map((item) => item.row + item.rows),
+    );
     workspace.style.setProperty("--layout-rows", rows);
-    onLayoutChange(panels.map((panel) => panel.id));
+    onDesktopChange(
+      activeDesktopId,
+      cloneAssignments(panelDesktopIds),
+      [...hiddenPanelIds],
+    );
+    onLayoutChange(activePanelIds);
   };
 
   const setUnlocked = (value) => {
@@ -302,23 +433,53 @@ export function createGridLayoutManager({
     panels.forEach((panel) => {
       panel.element.classList.toggle("collapsed", hiddenPanelIds.has(panel.id));
     });
-    onVisibilityChange([...hiddenPanelIds]);
+    onVisibilityChange(
+      [...hiddenPanelIds],
+      cloneAssignments(panelDesktopIds),
+      activeDesktopId,
+    );
   };
 
   const setFocusedPanel = (panelId) => {
-    focusedPanelId = panelId && panels.some((panel) => panel.id === panelId)
+    focusedPanelId = panelId
+      && panels.some((panel) => panel.id === panelId)
+      && panelDesktopIds[panelId] === activeDesktopId
       ? panelId
       : null;
     workspace.classList.toggle("panel-focus-mode", Boolean(focusedPanelId));
     panels.forEach((panel) => {
       panel.element.classList.toggle("panel-focused", panel.id === focusedPanelId);
-      const button = panel.element.querySelector("[data-panel-focus]");
+      const button = panel.element.querySelector?.("[data-panel-focus]");
       if (button) {
         button.textContent = panel.id === focusedPanelId ? "退出全屏" : "全屏";
         button.setAttribute?.("aria-label", panel.id === focusedPanelId ? "退出面板全屏" : "面板全屏");
       }
     });
     onFocusChange(focusedPanelId);
+  };
+
+  const switchDesktop = (desktopId, { persist: shouldPersist = true } = {}) => {
+    if (!desktopIds.includes(desktopId)) return false;
+    if (desktopId === activeDesktopId) {
+      onDesktopChange(
+        activeDesktopId,
+        cloneAssignments(panelDesktopIds),
+        [...hiddenPanelIds],
+      );
+      return true;
+    }
+    setFocusedPanel(null);
+    activeDesktopId = desktopId;
+    apply();
+    if (shouldPersist) persist();
+    return true;
+  };
+
+  const focusPanel = (panelId) => {
+    if (panelId && panelDesktopIds[panelId] !== activeDesktopId) {
+      switchDesktop(panelDesktopIds[panelId], {persist:false});
+    }
+    setFocusedPanel(panelId);
   };
 
   const saveAsDefault = () => {
@@ -328,6 +489,8 @@ export function createGridLayoutManager({
       savedViewSettings[currentMode],
     );
     userDefaultHiddenPanels[currentMode] = [...hiddenPanelIds];
+    userDefaultPanelDesktops = cloneAssignments(panelDesktopIds);
+    userDefaultActiveDesktop = activeDesktopId;
     persist();
     onDefaultSaved(currentMode);
   };
@@ -372,12 +535,12 @@ export function createGridLayoutManager({
           : { ...baseItem, columns: baseItem.columns + columnDelta, rows: baseItem.rows + rowDelta };
         const resolved = resolveLayoutWithAnchor(
           baseLayout,
-          manifestsForMode(currentMode),
+          manifestsForDesktopMode(activeDesktopId),
           panel.id,
           candidate,
           currentColumns,
         );
-        apply(resolved);
+        apply({...baseLayout, ...resolved});
       };
 
       const finish = () => {
@@ -390,7 +553,14 @@ export function createGridLayoutManager({
           mode === "resize"
           && (finalItem.columns < baseItem.columns || finalItem.rows < baseItem.rows)
         ) {
-          apply(compactLayout(currentLayout, manifestsForMode(currentMode), currentColumns));
+          apply({
+            ...currentLayout,
+            ...compactLayout(
+              currentLayout,
+              manifestsForDesktopMode(activeDesktopId),
+              currentColumns,
+            ),
+          });
         }
         persist();
       };
@@ -411,15 +581,37 @@ export function createGridLayoutManager({
 
   lockButton.addEventListener("click", () => setUnlocked(!unlocked));
   alignButton.addEventListener("click", () => {
-    apply(fitLayout(currentLayout, manifestsForMode(currentMode), currentColumns));
+    apply({
+      ...currentLayout,
+      ...fitLayout(
+        currentLayout,
+        manifestsForDesktopMode(activeDesktopId),
+        currentColumns,
+      ),
+    });
     persist();
   });
   saveDefaultButton.addEventListener("click", saveAsDefault);
   resetButton.addEventListener("click", () => {
-    currentLayout = userDefaults[currentMode] || defaultsForMode(currentMode);
+    panelDesktopIds = normalizePanelDesktops(
+      panels,
+      userDefaultPanelDesktops || builtInPanelDesktops,
+      desktopIds,
+    );
+    activeDesktopId = desktopIds.includes(userDefaultActiveDesktop)
+      ? userDefaultActiveDesktop
+      : desktopIds[0];
+    currentLayout = repairDesktopLayouts(
+      userDefaults[currentMode] || defaultsForMode(currentMode),
+      manifestsForMode(currentMode),
+      panelDesktopIds,
+      desktopIds,
+      currentColumns,
+    );
     applyViewSettings(settingsForMode(currentMode, true));
     applyHiddenPanels(userDefaultHiddenPanels[currentMode] || []);
-    apply(repairLayout(currentLayout, manifestsForMode(currentMode), currentColumns));
+    setFocusedPanel(null);
+    apply(currentLayout);
     persist();
   });
   window.addEventListener("resize", () => {
@@ -432,9 +624,11 @@ export function createGridLayoutManager({
     captureViewSettings();
     currentMode = nextMode;
     currentColumns = currentMode === "wide" ? 24 : 12;
-    currentLayout = repairLayout(
+    currentLayout = repairDesktopLayouts(
       savedModes[currentMode] || userDefaults[currentMode] || defaultsForMode(currentMode),
       manifestsForMode(currentMode),
+      panelDesktopIds,
+      desktopIds,
       currentColumns,
     );
     applyViewSettings(settingsForMode(currentMode));
@@ -458,10 +652,18 @@ export function createGridLayoutManager({
         layout: cloneLayout(currentLayout),
         viewSettings: cloneViewSettings(getViewSettings()),
         hiddenPanels: [...hiddenPanelIds],
+        activeDesktop: activeDesktopId,
+        panelDesktops: cloneAssignments(panelDesktopIds),
       };
     },
     setLayout: (layout, { persist: shouldPersist = true } = {}) => {
-      currentLayout = repairLayout(layout, manifestsForMode(currentMode), currentColumns);
+      currentLayout = repairDesktopLayouts(
+        layout,
+        manifestsForMode(currentMode),
+        panelDesktopIds,
+        desktopIds,
+        currentColumns,
+      );
       apply();
       if (shouldPersist) persist();
     },
@@ -474,23 +676,64 @@ export function createGridLayoutManager({
       if (shouldPersist) persist();
     },
     applySnapshot: (snapshot, { persist: shouldPersist = true } = {}) => {
-      currentLayout = repairLayout(snapshot?.layout || currentLayout, manifestsForMode(currentMode), currentColumns);
+      if (snapshot?.panelDesktops) {
+        panelDesktopIds = normalizePanelDesktops(
+          panels,
+          snapshot.panelDesktops,
+          desktopIds,
+        );
+      }
+      if (desktopIds.includes(snapshot?.activeDesktop)) {
+        activeDesktopId = snapshot.activeDesktop;
+      }
+      currentLayout = repairDesktopLayouts(
+        snapshot?.layout || currentLayout,
+        manifestsForMode(currentMode),
+        panelDesktopIds,
+        desktopIds,
+        currentColumns,
+      );
       applyViewSettings({ ...builtInViewSettings, ...(snapshot?.viewSettings || {}) });
       applyHiddenPanels(snapshot?.hiddenPanels || []);
+      setFocusedPanel(null);
       apply();
       if (shouldPersist) persist();
     },
-    focusPanel: setFocusedPanel,
+    focusPanel,
     refresh: () => apply(),
     saveAsDefault,
     saveViewSettings: persist,
+    getActiveDesktop: () => activeDesktopId,
+    getPanelDesktop: (panelId) => panelDesktopIds[panelId] || null,
+    getPanelDesktops: () => cloneAssignments(panelDesktopIds),
+    switchDesktop,
+    setPanelDesktop: (panelId, desktopId) => {
+      if (!panelDesktopIds[panelId] || !desktopIds.includes(desktopId)) return false;
+      if (panelDesktopIds[panelId] === desktopId) return true;
+      if (focusedPanelId === panelId) setFocusedPanel(null);
+      panelDesktopIds[panelId] = desktopId;
+      currentLayout = repairDesktopLayouts(
+        currentLayout,
+        manifestsForMode(currentMode),
+        panelDesktopIds,
+        desktopIds,
+        currentColumns,
+      );
+      apply();
+      persist();
+      return true;
+    },
     isPanelVisible: (panelId) => !hiddenPanelIds.has(panelId),
     setPanelVisible: (panelId, visible) => {
       if (visible) hiddenPanelIds.delete(panelId);
       else hiddenPanelIds.add(panelId);
       const panel = panels.find((candidate) => candidate.id === panelId);
       panel?.element.classList.toggle("collapsed", !visible);
-      onVisibilityChange([...hiddenPanelIds]);
+      onVisibilityChange(
+        [...hiddenPanelIds],
+        cloneAssignments(panelDesktopIds),
+        activeDesktopId,
+      );
       persist();
       if (visible) onLayoutChange([panelId]);
     },
