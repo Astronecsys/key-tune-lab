@@ -40,7 +40,7 @@ export class PresentationActionRegistry {
 
 export function createInstrumentActionRegistry({
   layout,
-  request,
+  instrument,
   refreshState,
   getSnapshot,
   resetSpectrumHistory,
@@ -71,27 +71,23 @@ export function createInstrumentActionRegistry({
     })
     .register("playback_start", async (action) => {
       if (!action.track_id) throw new Error("playback_start 缺少 track_id");
-      await request(`/api/playback/${encodeURIComponent(action.track_id)}/start`, {method:"POST"});
+      await instrument.startPlayback(action.track_id);
       await refreshState();
     })
     .register("playback_stop", async () => {
-      await request("/api/playback/stop", {method:"POST"});
+      await instrument.stopPlayback();
       await refreshState();
     })
     .register("recording_start", async () => {
-      await request("/api/recording/start", {method:"POST"});
+      await instrument.startRecording();
       await refreshState();
     })
     .register("recording_stop", async () => {
-      await request("/api/recording/stop", {method:"POST"});
+      await instrument.stopRecording();
       await refreshState();
     })
     .register("chord_basis", async (action) => {
-      await request("/api/chord/basis", {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(action.payload || action),
-      });
+      await instrument.setChordBasis(action.payload || action);
       await refreshState();
     })
     .register("assert_state", async (action) => {

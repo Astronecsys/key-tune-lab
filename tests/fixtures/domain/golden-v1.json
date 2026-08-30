@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "pitch_expressions": [
+    {
+      "expression": "5/4",
+      "value": 1.25,
+      "exact_numerator": "5",
+      "exact_denominator": "4"
+    },
+    {
+      "expression": "sqrt(2)",
+      "value": 1.4142135623730951,
+      "exact_numerator": null,
+      "exact_denominator": null
+    }
+  ],
+  "tuning_pitches": [
+    {
+      "tuning_id": "19edo",
+      "midi_note": 70,
+      "degree": 1,
+      "equave": 0,
+      "frequency_hz": 456.3482195563244,
+      "pitch_label": "R0[0:1]_19"
+    }
+  ],
+  "compilation": [
+    {
+      "tuning_id": "sqrt2_12",
+      "midi_note": 81,
+      "mode": "key_position",
+      "frequency_hz": 622.2539674441618,
+      "intent_kind": "physical_key"
+    },
+    {
+      "tuning_id": "sqrt2_12",
+      "midi_note": 81,
+      "mode": "nearest_frequency",
+      "frequency_hz": 880.0000000000002,
+      "intent_kind": "nominal_frequency"
+    },
+    {
+      "tuning_id": "sqrt2_12",
+      "midi_note": 81,
+      "mode": "equave_proportional",
+      "frequency_hz": 622.2539674441618,
+      "intent_kind": "equave_position"
+    }
+  ],
+  "simplest_chord_basis": {
+    "tuning_id": "ji5_12",
+    "active": [
+      {"midi_note": 60, "frequency_hz": 261.625565},
+      {"midi_note": 64, "frequency_hz": 327.03195625},
+      {"midi_note": 67, "frequency_hz": 392.4383475}
+    ],
+    "expected_midi_note": 60,
+    "expected_frequency_hz": 261.625565,
+    "expected_coverage": 3
+  },
+  "relative_tolerance": 1e-12
+}
+

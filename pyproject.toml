@@ -38,6 +38,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 music_lab = [
   "web/*",
+  "web/panels/*.js",
   "presets/input_surfaces/*.json",
   "presets/mappings/*.json",
   "presets/timbres/*.json",

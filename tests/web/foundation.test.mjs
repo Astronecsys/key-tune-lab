@@ -250,13 +250,17 @@ test("layout presentation and panel focus controls are available", () => {
     new URL("../../src/music_lab/web/app.js", import.meta.url),
     "utf8",
   );
+  const presentationSource = readFileSync(
+    new URL("../../src/music_lab/web/presentation-controller.js", import.meta.url),
+    "utf8",
+  );
   assert.match(html, /id="layoutSceneSelect"/);
   assert.match(html, /id="layoutPresentationToggle"/);
   assert.match(html, /id="desktopSwitcher"/);
   assert.match(html, /id="panelDesktopAssignments"/);
   assert.match(html, /switch_desktop/);
   assert.match(appSource, /initializePresentationLayouts/);
-  assert.match(appSource, /applySnapshot/);
+  assert.match(presentationSource, /applySnapshot/);
   assert.match(appSource, /event\.code === "Digit1"/);
   assert.match(appSource, /event\.code === "Digit2"/);
 });
@@ -354,17 +358,17 @@ test("tuning and chord relations use separate, explicit references", () => {
 });
 
 test("selected chord bases use a stable visible row action", () => {
-  const appSource = readFileSync(
-    new URL("../../src/music_lab/web/app.js", import.meta.url),
+  const relationPanelSource = readFileSync(
+    new URL("../../src/music_lab/web/panels/relation-panels.js", import.meta.url),
     "utf8",
   );
   const styles = readFileSync(
     new URL("../../src/music_lab/web/styles.css", import.meta.url),
     "utf8",
   );
-  assert.match(appSource, /basisButton\.textContent = "设 B"/);
+  assert.match(relationPanelSource, /basisButton\.textContent = "设 B"/);
   assert.match(
-    appSource,
+    relationPanelSource,
     /applyChordBasis\(\{mode:"selected", midi_note:tone\.midi_note\}\)/,
   );
   assert.match(styles, /\.basis-row-action \{/);
@@ -372,7 +376,7 @@ test("selected chord bases use a stable visible row action", () => {
     styles,
     /\.basis-row-action \{[^}]*background:\s*transparent/s,
   );
-  assert.doesNotMatch(appSource, /pitchCellMarkup\(tone, tone\.is_basis/);
+  assert.doesNotMatch(relationPanelSource, /pitchCellMarkup\(tone, tone\.is_basis/);
 });
 
 test("panels use compact English title bars without redundant Chinese headings", () => {
@@ -486,13 +490,17 @@ test("spectrum history becomes background frequency columns instead of a line", 
   });
   assert.ok(columns[0].brightness > columns[1].brightness);
 
+  const signalPanelSource = readFileSync(
+    new URL("../../src/music_lab/web/panels/signal-panels.js", import.meta.url),
+    "utf8",
+  );
   const appSource = readFileSync(
     new URL("../../src/music_lab/web/app.js", import.meta.url),
     "utf8",
   );
-  const memoryRenderer = appSource.slice(
-    appSource.indexOf("function drawSpectrumMemory"),
-    appSource.indexOf("function drawPartialRelations"),
+  const memoryRenderer = signalPanelSource.slice(
+    signalPanelSource.indexOf("function drawSpectrumMemory"),
+    signalPanelSource.indexOf("function drawPartialRelations"),
   );
   assert.match(memoryRenderer, /createLinearGradient/);
   assert.match(memoryRenderer, /fillRect/);
@@ -528,9 +536,13 @@ test("the keyboard keeps B visible and separates hover from selection", () => {
     new URL("../../src/music_lab/web/app.js", import.meta.url),
     "utf8",
   );
-  assert.match(appSource, /function drawChordBasisMarker/);
-  assert.doesNotMatch(appSource, /function drawUnsoundedBasisMarker/);
-  assert.match(appSource, /ctx\.setLineDash\(basis\.sounding \? \[\] : \[5, 4\]\)/);
+  const keyboardPanelSource = readFileSync(
+    new URL("../../src/music_lab/web/panels/keyboard-panel.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(keyboardPanelSource, /function drawChordBasisMarker/);
+  assert.doesNotMatch(keyboardPanelSource, /function drawUnsoundedBasisMarker/);
+  assert.match(keyboardPanelSource, /ctx\.setLineDash\(basis\.sounding \? \[\] : \[5, 4\]\)/);
   assert.match(appSource, /selectedNote: null/);
   assert.match(appSource, /hoveredInputId: null/);
   assert.match(appSource, /addEventListener\("mouseleave"/);
@@ -706,6 +718,10 @@ test("tuning spaces, input surfaces, and mappings are separate UI contracts", ()
     new URL("../../src/music_lab/web/app.js", import.meta.url),
     "utf8",
   );
+  const clientSource = readFileSync(
+    new URL("../../src/music_lab/web/instrument-client.js", import.meta.url),
+    "utf8",
+  );
   assert.match(html, /02 \/ TUNING SPACE/);
   assert.match(html, /id="tuningConstruction"/);
   assert.match(html, /value="generator_lattice"/);
@@ -714,8 +730,9 @@ test("tuning spaces, input surfaces, and mappings are separate UI contracts", ()
   assert.match(html, /id="mappingAnchorNode"/);
   assert.match(html, /id="mappingReferenceDegree"/);
   assert.match(html, /id="inputSurfaceSelect"/);
-  assert.match(appSource, /api\/input-surface/);
-  assert.match(appSource, /api\/input\/\$\{encodeURIComponent\(key\.nodeId\)\}\/on/);
+  assert.match(clientSource, /api\/input-surface/);
+  assert.match(clientSource, /api\/input\/\$\{encodeURIComponent\(nodeId\)\}\/on/);
+  assert.doesNotMatch(appSource, /["'`]\/api\//);
 });
 
 test("tuning definitions use an open library and interval-cycle editor contract", () => {
@@ -727,6 +744,10 @@ test("tuning definitions use an open library and interval-cycle editor contract"
     new URL("../../src/music_lab/web/app.js", import.meta.url),
     "utf8",
   );
+  const clientSource = readFileSync(
+    new URL("../../src/music_lab/web/instrument-client.js", import.meta.url),
+    "utf8",
+  );
   const styles = readFileSync(
     new URL("../../src/music_lab/web/styles.css", import.meta.url),
     "utf8",
@@ -736,7 +757,7 @@ test("tuning definitions use an open library and interval-cycle editor contract"
   assert.match(html, /id="tuningLibraryButton"/);
   assert.match(html, /id="saveTuningButton"/);
   assert.match(html, /id="reloadTuningLibraryButton"/);
-  assert.match(appSource, /\/api\/tuning\/library/);
+  assert.match(clientSource, /\/api\/tuning\/library/);
   assert.match(appSource, /library-open/);
   assert.match(styles, /\.tuning-space-panel\.library-open/);
 });
@@ -769,11 +790,15 @@ test("tuning-space visualization is circular, logarithmic, and keeps T as an ove
 });
 
 test("track controls expose per-axis tuning compilation", () => {
-  const appSource = readFileSync(
-    new URL("../../src/music_lab/web/app.js", import.meta.url),
+  const tracksSource = readFileSync(
+    new URL("../../src/music_lab/web/panels/tracks-panel.js", import.meta.url),
     "utf8",
   );
-  assert.match(appSource, /data-track-compile/);
-  assert.match(appSource, /\/api\/tracks\/\$\{encodeURIComponent\(select\.dataset\.track\)\}\/compile/);
-  assert.match(appSource, /track\.source_timing\?\.ticks_per_beat/);
+  const clientSource = readFileSync(
+    new URL("../../src/music_lab/web/instrument-client.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(tracksSource, /data-track-compile/);
+  assert.match(clientSource, /\/api\/tracks\/\$\{encodeURIComponent\(trackId\)\}\/compile/);
+  assert.match(tracksSource, /track\.source_timing\?\.ticks_per_beat/);
 });

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import threading
 import time
 from dataclasses import dataclass
@@ -8,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .audio_analysis import AudioAnalysisTap
+from .audio_output import AudioOutputAdapter
 from .timbre_library import Timbre, get_timbre
 
 
@@ -42,16 +42,13 @@ class PolySynth:
         self._channel_pitch_bends: dict[int, int] = {}
         self.pitch_bend_range_semitones = 2.0
         self._lock = threading.RLock()
-        self._stream = None
-        self._stream_context = None
-        self._backend: str | None = None
-        self._writer_thread: threading.Thread | None = None
-        self._writer_stop = threading.Event()
-        self._error: str | None = None
+        self._output = AudioOutputAdapter(
+            enabled=enabled,
+            sample_rate_hz=sample_rate_hz,
+            block_size=block_size,
+        )
         self.attack_samples = round(0.005 * sample_rate_hz)
         self.release_samples = round(0.12 * sample_rate_hz)
-        self.output_device_name: str | None = None
-        self.output_latency_seconds: float | None = None
         self.analysis_tap = AudioAnalysisTap(sample_rate_hz)
         self._callback_status_count = 0
         self._underrun_count = 0
@@ -66,115 +63,91 @@ class PolySynth:
 
     @staticmethod
     def _preferred_output_device(sd) -> int | None:  # noqa: ANN001
-        """Prefer the default WASAPI output on Windows instead of high-latency MME."""
-        for host_api in sd.query_hostapis():
-            if "WASAPI" in host_api["name"] and host_api["default_output_device"] >= 0:
-                return int(host_api["default_output_device"])
-        default_output = sd.default.device[1]
-        return int(default_output) if default_output is not None else None
+        return AudioOutputAdapter.preferred_output_device(sd)
+
+    @property
+    def _stream(self):  # noqa: ANN201
+        return self._output.stream
+
+    @_stream.setter
+    def _stream(self, value) -> None:  # noqa: ANN001
+        self._output.stream = value
+
+    @property
+    def _stream_context(self):  # noqa: ANN201
+        return self._output.stream_context
+
+    @_stream_context.setter
+    def _stream_context(self, value) -> None:  # noqa: ANN001
+        self._output.stream_context = value
+
+    @property
+    def _backend(self) -> str | None:
+        return self._output.backend
+
+    @_backend.setter
+    def _backend(self, value: str | None) -> None:
+        self._output.backend = value
+
+    @property
+    def _writer_thread(self) -> threading.Thread | None:
+        return self._output.writer_thread
+
+    @_writer_thread.setter
+    def _writer_thread(self, value: threading.Thread | None) -> None:
+        self._output.writer_thread = value
+
+    @property
+    def _writer_stop(self) -> threading.Event:
+        return self._output.writer_stop
+
+    @property
+    def _error(self) -> str | None:
+        return self._output.error
+
+    @_error.setter
+    def _error(self, value: str | None) -> None:
+        self._output.error = value
+
+    @property
+    def output_device_name(self) -> str | None:
+        return self._output.device_name
+
+    @property
+    def output_latency_seconds(self) -> float | None:
+        return self._output.latency_seconds
+
+    def _register_blocking_underflow(self, message: str) -> None:
+        with self._lock:
+            self._callback_status_count += 1
+            self._underrun_count += 1
+            self._last_callback_status = message
 
     def start(self) -> None:
-        if not self.enabled:
-            return
-        try:
-            self._error = None
-            if os.name == "nt":
-                import soundcard as sc
-
-                speaker = sc.default_speaker()
-                if speaker is None:
-                    raise RuntimeError("no default Windows output device")
-                self._stream_context = speaker.player(
-                    samplerate=self.sample_rate_hz,
-                    channels=2,
-                    blocksize=self.block_size,
-                )
-                self._stream = self._stream_context.__enter__()
-                self._backend = "wasapi_soundcard"
-                self.output_device_name = speaker.name
-                self.output_latency_seconds = (
-                    float(self._stream.buffersize) / self.sample_rate_hz
-                )
-            else:
-                import sounddevice as sd
-
-                device = self._preferred_output_device(sd)
-                self._stream = sd.OutputStream(
-                    device=device,
-                    samplerate=self.sample_rate_hz,
-                    blocksize=self.block_size,
-                    channels=2,
-                    dtype="float32",
-                    latency="low",
-                )
-                self._stream.start()
-                device_info = sd.query_devices(device, "output")
-                self._backend = "portaudio_blocking_writer"
-                self.output_device_name = str(device_info["name"])
-                self.output_latency_seconds = float(self._stream.latency)
+        with self._lock:
             self._last_callback_monotonic = None
-            with self._lock:
-                self._last_callback_monotonic = None
-                self._callback_max_gap_ms = 0.0
-                self._late_callback_count = 0
-            self._writer_stop.clear()
-            self._writer_thread = threading.Thread(
-                target=self._writer_loop,
-                name="music-lab-audio-writer",
-                daemon=True,
-            )
-            self._writer_thread.start()
-        except Exception as error:  # hardware availability is environment-specific
-            self._error = str(error)
-            self._stop_output_backend()
-            self._backend = None
+            self._callback_max_gap_ms = 0.0
+            self._late_callback_count = 0
+        self._output.start(self._callback, self._register_blocking_underflow)
 
     def stop(self) -> None:
-        self._writer_stop.set()
-        writer_thread = self._writer_thread
-        if writer_thread is not None and writer_thread is not threading.current_thread():
-            writer_thread.join(timeout=0.5)
-        self._writer_thread = None
+        self._output.stop()
         with self._lock:
             self._voices.clear()
             self._channel_pitch_bends.clear()
             self._last_callback_monotonic = None
-        self._stop_output_backend()
-        self._backend = None
 
     def _writer_loop(self) -> None:
-        stream = self._stream
-        if stream is None:
-            return
-        outdata = np.empty((self.block_size, 2), dtype=np.float32)
-        try:
-            while not self._writer_stop.is_set():
-                self._callback(outdata, self.block_size, None, None)
-                if self._write_stream_block(stream, outdata):
-                    with self._lock:
-                        self._callback_status_count += 1
-                        self._underrun_count += 1
-                        self._last_callback_status = "blocking write underflow"
-        except Exception as error:  # hardware availability is environment-specific
-            with self._lock:
-                self._error = str(error)
+        # 兼容旧诊断脚本；真实设备循环由 AudioOutputAdapter 所有。
+        self._output._render = self._callback
+        self._output._underflow = self._register_blocking_underflow
+        self._output.writer_loop()
 
     def _write_stream_block(self, stream, outdata: np.ndarray) -> bool:  # noqa: ANN001
-        if self._backend == "wasapi_soundcard":
-            stream.play(outdata)
-            return False
-        return bool(stream.write(outdata))
+        return self._output.write_stream_block(stream, outdata)
 
     def _stop_output_backend(self) -> None:
-        stream = self._stream
-        stream_context = self._stream_context
-        self._stream = None
-        self._stream_context = None
-        if stream_context is not None:
-            stream_context.__exit__(None, None, None)
-        elif stream is not None:
-            stream.stop()
-            stream.close()
+        self._output.stop_backend()
 
     def set_timbre(self, timbre_id: str) -> None:
         with self._lock:
@@ -405,9 +378,7 @@ class PolySynth:
                 bent_frequency = voice.frequency_hz * 2 ** (bend_semitones / 12)
                 audible_amplitudes = 0.0
                 for partial_index, (multiple, amplitude) in enumerate(timbre.partials):
-                    angular_step = (
-                        2 * np.pi * bent_frequency * multiple / self.sample_rate_hz
-                    )
+                    angular_step = 2 * np.pi * bent_frequency * multiple / self.sample_rate_hz
                     phases = voice.phases[partial_index] + angular_step * sample_indices
                     if bent_frequency * multiple < nyquist_limit:
                         voice_signal += amplitude * np.sin(phases)

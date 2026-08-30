@@ -75,16 +75,22 @@ npm run test:e2e
 ```text
 src/music_lab/instrument/   MIDI、合成器、律制与运行时
 src/music_lab/web/          网页面板与布局放映
+docs/architecture.md        模块边界与未来 TS 迁移路线
 configs/tunings/            用户律制配置
 tests/                      Python 与网页回归测试
 ```
 
 ### 架构边界
 
-- `InstrumentRuntime` 是面向 HTTP/WebSocket 的兼容门面；事件、播放、附加轨道与输出分析分别由独立服务持有。
+- `InstrumentRuntime` 只保留装配、生命周期和兼容门面；配置、录音/轨道、统一音符路由、和弦分析及快照分别由 `instrument/services/` 中的应用服务持有。
+- `ports.py` 定义时钟、MIDI 与合成器端口；`audio_output.py` 隔离 Windows WASAPI / PortAudio 设备，`synth.py` 保持 DSP、voice 与诊断兼容接口。
 - `tuning`、`input_surface` 和 `mapping` 分别表示“有哪些音”“有哪些物理输入”“如何桥接两者”，不要把 MIDI 键号当成音高身份。
-- 网页的网络请求、遥测节流、布局几何和放映动作注册表彼此独立；新增放映动作应注册处理器，不再扩充总控条件分支。
+- 浏览器内只有 `instrument-client.js` 知道 `/api/*` 与 `/ws`；状态由 `instrument-store.js` 保存，旧快照兼容由纯选择器处理，各面板渲染器位于 `web/panels/`。
+- 网络请求、遥测节流、布局几何、面板渲染和放映控制器彼此独立；新增放映动作应注册处理器，不再扩充总控条件分支。
 - 音频回调只负责发声和写入观察 tap；FFT、相图与诊断读取不会改变任何 voice。
+- `tests/fixtures/domain/golden-v1.json` 是语言无关的领域黄金向量；未来改写 TS 核心时必须让 Python 与 TS 同时通过这些向量，之后才替换客户端实现。
+
+完整依赖方向、改动落点和迁移顺序见 [架构说明](docs/architecture.md)。
 
 ### 开放配置库
 
