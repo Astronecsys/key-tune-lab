@@ -14,6 +14,8 @@
 
 面板地址：<http://127.0.0.1:8765/>
 
+首次安装使用仓库中的 `requirements-panel.lock` 固定 Python 依赖版本；更新 `pyproject.toml` 后应使用 `pip-compile --extra dev --strip-extras --no-emit-index-url` 重新生成锁文件。
+
 常用参数：
 
 ```powershell
@@ -58,11 +60,14 @@
 
 当前支持 `switch_desktop`、`focus_panel`、`set_panel_visibility`、`set_view`、`playback_start`、`playback_stop`、`recording_start`、`recording_stop`、`clear_spectrum_history`、`chord_basis`、`wait`、`assert_state` 和 `toast`。浏览器页面也暴露了 `window.KEY_TUNE_PRESENTATION`，可用 `getDocument()`、`select(id)`、`start()`、`stop()`、`setActions(id, actions)` 编排配置；`window.KEY_TUNE_DESKTOPS` 提供 `list()`、`active()`、`switch(id)`、`assignments()` 与 `movePanel(panelId, desktopId)`。
 
+布局、放映与浏览器自定义音色统一保存在版本化的 `KeyTuneProject` 文档中。控制台可调用 `window.KEY_TUNE_PROJECT.exportJson()` 导出，或调用 `importJson(json)` 导入并刷新工作台。首次升级会自动读取旧 Local Storage，且不会删除旧键。
+
 ## 开发与测试
 
 ```powershell
 .\.panel-env\python.exe -m pytest -q
 npm test
+npm run test:e2e
 ```
 
 主要代码：
@@ -74,4 +79,23 @@ configs/tunings/            用户律制配置
 tests/                      Python 与网页回归测试
 ```
 
-网页布局数据保存在浏览器 Local Storage，不会写入 MIDI 或音频文件。
+### 架构边界
+
+- `InstrumentRuntime` 是面向 HTTP/WebSocket 的兼容门面；事件、播放、附加轨道与输出分析分别由独立服务持有。
+- `tuning`、`input_surface` 和 `mapping` 分别表示“有哪些音”“有哪些物理输入”“如何桥接两者”，不要把 MIDI 键号当成音高身份。
+- 网页的网络请求、遥测节流、布局几何和放映动作注册表彼此独立；新增放映动作应注册处理器，不再扩充总控条件分支。
+- 音频回调只负责发声和写入观察 tap；FFT、相图与诊断读取不会改变任何 voice。
+
+### 开放配置库
+
+内置定义与用户定义使用同一份 JSON schema 和校验器：
+
+```text
+src/music_lab/presets/tunings/          内置律制
+src/music_lab/presets/timbres/          内置音色
+src/music_lab/presets/input_surfaces/   内置实体表面
+src/music_lab/presets/mappings/         内置映射预设
+configs/<同名目录>/                     本机用户定义（默认不提交）
+```
+
+增加历史律制或实验音色通常只需要增加 JSON；只有出现新的生成方式时才需要修改 Python。网页布局数据保存在浏览器 Local Storage，不会写入 MIDI 或音频文件。

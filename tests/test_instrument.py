@@ -14,7 +14,6 @@ from music_lab.instrument.synth import PolySynth
 from music_lab.instrument.target import (
     PitchBendEvent,
     ScoreNote,
-    parse_midi_bytes,
     parse_midi_sequence,
 )
 from music_lab.instrument.tuning import get_tuning
@@ -1128,9 +1127,17 @@ def test_phase_snapshot_preserves_full_rate_final_output_samples() -> None:
 
 def test_performance_can_be_restored_across_runtime_restart() -> None:
     runtime = InstrumentRuntime("unused", audio_enabled=False)
-    runtime.restore_performance([
-        {"midi_note": 55, "channel": 0, "velocity": 39, "start_seconds": 1.36, "duration_seconds": 0.67}
-    ])
+    runtime.restore_performance(
+        [
+            {
+                "midi_note": 55,
+                "channel": 0,
+                "velocity": 39,
+                "start_seconds": 1.36,
+                "duration_seconds": 0.67,
+            }
+        ]
+    )
     assert runtime.snapshot()["performance"][0]["midi_note"] == 55
 
 

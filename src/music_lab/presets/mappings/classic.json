@@ -1,0 +1,34 @@
+[
+  {
+    "schema_version": 1,
+    "id": "piano-continuous",
+    "name": "钢琴 · 连续音级",
+    "description": "每个实体键前进一个律制音级。",
+    "surface_kinds": ["piano"],
+    "mapping": {"mode": "continuous", "degree_step": 1}
+  },
+  {
+    "schema_version": 1,
+    "id": "piano-white-only",
+    "name": "钢琴 · 仅白键",
+    "description": "只用白键连续承载律制音级。",
+    "surface_kinds": ["piano"],
+    "mapping": {"mode": "white_only", "degree_step": 1}
+  },
+  {
+    "schema_version": 1,
+    "id": "hex-linear",
+    "name": "蜂窝 · 等分基向量",
+    "description": "q/r 两轴分别前进 24 与 13 个音级。",
+    "surface_kinds": ["hex"],
+    "mapping": {"mode": "grid_linear", "q_step": 24, "r_step": 13}
+  },
+  {
+    "schema_version": 1,
+    "id": "hex-harmonic",
+    "name": "蜂窝 · 3/2 × 5/4",
+    "description": "q/r 两轴使用精确的 3/2 与 5/4 比例。",
+    "surface_kinds": ["hex"],
+    "mapping": {"mode": "harmonic_lattice", "q_ratio_expression": "3/2", "r_ratio_expression": "5/4"}
+  }
+]

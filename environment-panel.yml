@@ -6,4 +6,5 @@ dependencies:
   - pip
   - pip:
       - --index-url https://pypi.org/simple
-      - -e .[dev]
+      - -r requirements-panel.lock
+      - -e .

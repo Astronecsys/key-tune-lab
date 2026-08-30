@@ -5,7 +5,6 @@ from collections.abc import Iterable
 
 from .tuning import RELATION_PRIMES, nearest_harmonic_ratio, ratio_from_prime_vector
 
-
 _RELATION_ERROR_WEIGHT = 4000.0
 _FUNDAMENTAL_TOLERANCE = math.log(1.01)
 _MAX_FUNDAMENTAL_PARTIAL = 16

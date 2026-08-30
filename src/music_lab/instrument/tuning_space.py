@@ -5,7 +5,6 @@ import re
 from dataclasses import asdict, dataclass
 from fractions import Fraction
 
-
 _POWER_PATTERN = re.compile(r"^(.+)\^\((-?\d+)/(\d+)\)$")
 _SQRT_PATTERN = re.compile(r"^sqrt\((\d+(?:\.\d+)?)\)$")
 

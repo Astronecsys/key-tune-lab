@@ -7,4 +7,10 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+node_modules/
+test-results/
+playwright-report/
 configs/tunings/*.json
+configs/input_surfaces/*.json
+configs/mappings/*.json
+configs/timbres/*.json

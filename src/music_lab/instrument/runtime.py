@@ -13,8 +13,8 @@ from .chord_basis import (
     select_composite_basis,
     select_simplest_basis,
 )
-from .contracts import INSTRUMENT_SCHEMA_VERSION
-from .midi_io import MidiInput
+from .contracts import INSTRUMENT_SCHEMA_VERSION, InstrumentSnapshot, LiveSnapshot
+from .events import InstrumentEventBus
 from .input_surface import (
     InputNode,
     available_input_surfaces,
@@ -28,15 +28,19 @@ from .mapping import (
     nearest_subset,
     validate_mapping,
 )
-from .synth import PolySynth, available_timbres
+from .mapping_preset import available_mapping_presets
+from .midi_io import MidiInput
+from .playback import PlaybackService
+from .synth import PolySynth
 from .target import PitchBendEvent, ScoreNote, demo_score, parse_midi_sequence
+from .timbre_library import available_timbres
+from .track_service import TrackService
 from .tuning import (
     KeyPitch,
     Tuning,
     available_tunings,
     format_prime_vector,
     get_tuning,
-    key_label,
     nearest_harmonic_ratio,
     ratio_from_prime_vector,
 )
@@ -52,7 +56,6 @@ from .tuning_library import (
     save_user_tuning_definition,
     tuning_from_definition,
 )
-
 
 # Playback uses synth-only channels outside the MIDI 0-15 range so stopping an
 # axis can never release a physical keyboard note that happens to share a MIDI
@@ -96,8 +99,7 @@ class PerformanceNote:
 class InstrumentRuntime:
     def __init__(self, midi_port_hint: str, audio_enabled: bool = True) -> None:
         self._lock = threading.RLock()
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._subscribers: set[asyncio.Queue] = set()
+        self.events = InstrumentEventBus()
         self.tuning = get_tuning("12edo")
         self.synth = PolySynth(enabled=audio_enabled)
         self.midi = MidiInput(
@@ -153,16 +155,18 @@ class InstrumentRuntime:
         self._auto_basis_pending_since = 0.0
         self._auto_basis_candidate_signature: tuple | None = None
         self._auto_basis_candidate_cache: dict | None = None
-        self.extra_tracks: dict[str, dict] = {}
-        self._track_counter = 0
-        self._playback_thread: threading.Thread | None = None
-        self._playback_stop = threading.Event()
-        self.playback_kind: str | None = None
-        self.playback_started_monotonic = 0.0
+        self.track_service = TrackService()
+        # 兼容现有扩展代码；真实所有权已经移入 TrackService。
+        self.extra_tracks = self.track_service.items
         self._static_render_cache: dict | None = None
+        self.playback = PlaybackService(
+            lock=self._lock,
+            publish=self._publish,
+            force_cleanup=self._force_playback_cleanup,
+        )
 
     def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
-        self._loop = loop
+        self.events.set_loop(loop)
 
     def start(self) -> None:
         self.synth.start()
@@ -178,12 +182,10 @@ class InstrumentRuntime:
         self._publish({"type": "status", "midi": status})
 
     def subscribe(self) -> asyncio.Queue:
-        queue: asyncio.Queue = asyncio.Queue(maxsize=32)
-        self._subscribers.add(queue)
-        return queue
+        return self.events.subscribe()
 
     def unsubscribe(self, queue: asyncio.Queue) -> None:
-        self._subscribers.discard(queue)
+        self.events.unsubscribe(queue)
 
     def set_tuning(self, tuning_id: str) -> None:
         tuning = get_tuning(tuning_id)
@@ -560,6 +562,11 @@ class InstrumentRuntime:
             self.chord_basis_mode = mode
         self._publish({"type": "configuration", "field": "chord_basis"})
 
+    @property
+    def playback_kind(self) -> str | None:
+        """兼容旧调用方；播放会话状态由 PlaybackService 单独管理。"""
+        return self.playback.kind
+
     def start_playback(self, kind: str) -> None:
         if kind == "target":
             notes = list(self.target_notes)
@@ -593,30 +600,24 @@ class InstrumentRuntime:
             raise ValueError("找不到要播放的轨道")
         if not notes:
             raise ValueError("没有可播放的音符")
-        self.stop_playback()
-        self._playback_stop.clear()
-        self.playback_kind = kind
-        self.playback_started_monotonic = time.monotonic()
-        self._playback_thread = threading.Thread(
-            target=self._play_notes,
-            args=(notes, pitch_bends, channel_base, kind, compile_mode),
-            name=f"music-lab-{kind}-playback",
-            daemon=True,
+        self.playback.start(
+            kind,
+            lambda stop_event: self._play_notes(
+                notes,
+                pitch_bends,
+                channel_base,
+                kind,
+                compile_mode,
+                stop_event,
+            ),
         )
-        self._playback_thread.start()
-        self._publish({"type": "playback", "kind": kind, "playing": True})
 
     def stop_playback(self) -> None:
-        self._playback_stop.set()
-        thread = self._playback_thread
-        if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=0.5)
-        self._release_sounding_source("playback")
+        self.playback.stop()
+
+    def _force_playback_cleanup(self, kind: str | None) -> None:
+        self._release_sounding_source("playback", kind)
         self.synth.notes_off_for_channels(_playback_channels())
-        with self._lock:
-            self._playback_thread = None
-            self.playback_kind = None
-        self._publish({"type": "playback", "playing": False})
 
     def start_recording(self) -> None:
         with self._lock:
@@ -645,8 +646,6 @@ class InstrumentRuntime:
         with self._lock:
             if not self.performance_notes:
                 return None
-            self._track_counter += 1
-            track_id = f"track-{self._track_counter}"
             notes = [
                 ScoreNote(
                     midi_note=note.midi_note,
@@ -659,15 +658,14 @@ class InstrumentRuntime:
                 )
                 for note in self.performance_notes
             ]
-            self.extra_tracks[track_id] = {
-                "name": self.performance_name,
-                "kind": "performance",
-                "notes": notes,
-                "pitch_bends": list(self.performance_pitch_bends),
-                "source_timing": self.performance_source_timing,
-                "compile_mode": self.performance_compile_mode,
-            }
-            return track_id
+            return self.track_service.create(
+                filename=self.performance_name,
+                kind="performance",
+                notes=notes,
+                pitch_bends=list(self.performance_pitch_bends),
+                source_timing=self.performance_source_timing,
+                compile_mode=self.performance_compile_mode,
+            )
 
     def stop_recording(self) -> None:
         with self._lock:
@@ -779,30 +777,14 @@ class InstrumentRuntime:
                 self.performance_name = filename
                 self.performance_visible = True
                 resolved_id = "performance"
-            elif track_id and track_id in self.extra_tracks:
-                compile_mode = self.extra_tracks[track_id].get(
-                    "compile_mode", KEY_POSITION
-                )
-                self.extra_tracks[track_id] = {
-                    "name": filename,
-                    "kind": "score",
-                    "notes": notes,
-                    "pitch_bends": pitch_bends,
-                    "source_timing": source_timing,
-                    "compile_mode": compile_mode,
-                }
-                resolved_id = track_id
             else:
-                self._track_counter += 1
-                resolved_id = f"track-{self._track_counter}"
-                self.extra_tracks[resolved_id] = {
-                    "name": filename,
-                    "kind": "score",
-                    "notes": notes,
-                    "pitch_bends": pitch_bends,
-                    "source_timing": source_timing,
-                    "compile_mode": KEY_POSITION,
-                }
+                resolved_id = self.track_service.upsert(
+                    filename=filename,
+                    notes=notes,
+                    pitch_bends=pitch_bends,
+                    source_timing=source_timing,
+                    track_id=track_id,
+                )
         self._publish({"type": "tracks", "action": "loaded", "track_id": resolved_id})
         return resolved_id, len(notes)
 
@@ -817,9 +799,7 @@ class InstrumentRuntime:
                 self.target_source_timing = None
                 self.target_name = "空目标轨道"
             elif track_id in self.extra_tracks:
-                self.extra_tracks[track_id]["notes"] = []
-                self.extra_tracks[track_id]["pitch_bends"] = []
-                self.extra_tracks[track_id]["source_timing"] = None
+                self.track_service.clear(track_id)
             else:
                 raise ValueError("找不到轨道")
         self._publish({"type": "tracks", "action": "cleared", "track_id": track_id})
@@ -844,8 +824,8 @@ class InstrumentRuntime:
                 self.performance_name = "你的演奏"
                 self.performance_visible = False
                 self.recording_stopped_elapsed = 0.0
-            elif self.extra_tracks.pop(track_id, None) is None:
-                raise ValueError("找不到轨道")
+            else:
+                self.track_service.delete(track_id)
         self._publish({"type": "tracks", "action": "deleted", "track_id": track_id})
 
     def set_track_compile_mode(self, track_id: str, mode: str) -> None:
@@ -858,7 +838,7 @@ class InstrumentRuntime:
             elif track_id == "performance" and self.performance_visible:
                 self.performance_compile_mode = mode
             elif track_id in self.extra_tracks:
-                self.extra_tracks[track_id]["compile_mode"] = mode
+                self.track_service.set_compile_mode(track_id, mode)
             else:
                 raise ValueError("找不到轨道")
         self._publish(
@@ -879,7 +859,7 @@ class InstrumentRuntime:
             self.target_visible = True
         self._publish({"type": "target_loaded", "name": self.target_name})
 
-    def snapshot(self) -> dict:
+    def snapshot(self) -> InstrumentSnapshot:
         with self._lock:
             record_now = self._record_time()
             static_render = self._static_render_payload()
@@ -910,6 +890,7 @@ class InstrumentRuntime:
                 "tuning": self.tuning.summary(),
                 "input_surfaces": self._available_input_surfaces(),
                 "mapping_modes": available_mapping_modes(),
+                "mapping_presets": available_mapping_presets(),
                 "compile_modes": available_compile_modes(),
                 "timbres": self._available_timbres(),
                 "timbre": self.synth.timbre.summary(),
@@ -935,7 +916,7 @@ class InstrumentRuntime:
                 "tracks": tracks,
             }
 
-    def live_snapshot(self) -> dict:
+    def live_snapshot(self) -> LiveSnapshot:
         """Return only fast-changing state; static score data stays client-side."""
         with self._lock:
             record_now = self._record_time()
@@ -962,15 +943,7 @@ class InstrumentRuntime:
             }
 
     def _playback_payload(self) -> dict:
-        return {
-            "kind": self.playback_kind,
-            "playing": self.playback_kind is not None,
-            "elapsed_seconds": (
-                max(0.0, time.monotonic() - self.playback_started_monotonic)
-                if self.playback_kind is not None
-                else 0.0
-            ),
-        }
+        return self.playback.payload()
 
     def _handle_midi_event(self, event: dict) -> None:
         event_type = event["type"]
@@ -1229,6 +1202,7 @@ class InstrumentRuntime:
         channel_base: int,
         kind: str,
         compile_mode: str,
+        stop_event: threading.Event,
     ) -> None:
         events: list[tuple[float, int, int, str, object]] = []
         for note_index, note in enumerate(notes):
@@ -1258,7 +1232,7 @@ class InstrumentRuntime:
         try:
             for event_time, _, event_index, event_type, event_payload in events:
                 delay = max(0.0, started + event_time - time.monotonic())
-                if self._playback_stop.wait(delay):
+                if stop_event.wait(delay):
                     break
                 if event_type == "pitch_bend":
                     pitch_bend = event_payload
@@ -1327,11 +1301,6 @@ class InstrumentRuntime:
             self.synth.notes_off_for_channels(
                 {channel_base + channel for channel in range(16)}
             )
-        if not self._playback_stop.is_set():
-            with self._lock:
-                self.playback_kind = None
-                self._playback_thread = None
-            self._publish({"type": "playback", "kind": kind, "playing": False})
 
     def _chord_payload(self) -> dict:
         active = sorted(self.active_notes.values(), key=lambda item: item["frequency_hz"])
@@ -1932,17 +1901,4 @@ class InstrumentRuntime:
             with self._lock:
                 self._static_render_cache = None
 
-        loop = self._loop
-        if loop is None or not loop.is_running():
-            return
-
-        def deliver() -> None:
-            for queue in tuple(self._subscribers):
-                if queue.full():
-                    try:
-                        queue.get_nowait()
-                    except asyncio.QueueEmpty:
-                        pass
-                queue.put_nowait(event)
-
-        loop.call_soon_threadsafe(deliver)
+        self.events.publish(event)

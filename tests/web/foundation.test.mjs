@@ -300,6 +300,14 @@ test("global actions live in the panels they control", () => {
   assert.match(html, /id="layoutSaveDefaultButton"/);
   const keyboardPanel = html.slice(html.indexOf('<section id="keyboardPanel"'));
   assert.match(keyboardPanel, /id="midiStatus"/);
+  assert.ok(
+    keyboardPanel.indexOf('id="activeSummary"') < keyboardPanel.indexOf('class="surface-heading-controls"'),
+    "动态演奏摘要应位于固定的表面和 MIDI 控件之前",
+  );
+  assert.ok(
+    keyboardPanel.indexOf('id="inputSurfaceSelect"') < keyboardPanel.indexOf('id="midiStatus"'),
+    "键盘面板应先显示表面选择，再显示 MIDI 状态",
+  );
   assert.doesNotMatch(html.slice(0, html.indexOf('<section id="layoutPanel"')), /id="midiStatus"/);
 });
 

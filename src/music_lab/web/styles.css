@@ -121,7 +121,7 @@ button.track-stop { border-color: rgba(243,139,168,.55); color: var(--red); back
 .file-control button { width: 100%; }
 
 .dashboard { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(310px, .8fr); gap: 14px; }
-.keyboard-card { grid-column: 1 / -1; grid-row: 3; padding: 20px; min-width: 0; }
+.keyboard-card { grid-column: 1 / -1; grid-row: 3; padding: 20px; min-width: 0; container-type: inline-size; }
 .inspector { grid-column: 2; grid-row: 1; padding: 20px; }
 .timeline-card { grid-column: 1; grid-row: 1; padding: 20px; min-width: 0; }
 .analysis-card { grid-row: 2; padding: 20px; min-width: 0; }
@@ -335,10 +335,26 @@ h1 { font-size: 31px; }
 .mapping-actions .master-volume { min-height: 38px; padding: 0 7px; border: 1px solid var(--surface-0); border-radius: 8px; background: var(--panel-2); }
 .mapping-actions .master-volume input { width: 90px; }
 #mappingPanel > .subtle { margin-bottom: 0; }
-.surface-heading-controls { display: flex; align-items: flex-end; justify-content: flex-end; gap: 12px; }
-.surface-heading-controls label { display: grid; gap: 3px; min-width: 180px; }
+.surface-heading-copy { flex: 1 1 auto; min-width: 0; }
+.surface-heading-copy #activeSummary,
+.surface-heading-copy #surfaceDescription { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.surface-heading-copy #activeSummary { min-height: 17px; margin-top: 4px; color: var(--text); }
+.surface-heading-copy #surfaceDescription { margin-top: 2px; }
+.surface-heading-controls { display: grid; grid-template-columns: 190px minmax(260px, 420px); align-items: end; gap: 12px; flex: 0 0 auto; }
+.surface-heading-controls label { display: grid; gap: 3px; min-width: 0; }
 .surface-heading-controls label span { color: var(--muted); font-size: 10px; }
 .surface-heading-controls select { height: 29px; padding: 0 8px; }
+.surface-heading-controls #midiStatus { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 面板缩窄时按面板自身宽度换行，不依赖整个浏览器窗口的宽度。 */
+@container (max-width: 850px) {
+  .keyboard-card .section-heading { align-items: stretch; flex-direction: column; }
+  .keyboard-card .surface-heading-controls { grid-template-columns: minmax(160px, .8fr) minmax(220px, 1.2fr); }
+}
+
+@container (max-width: 520px) {
+  .keyboard-card .surface-heading-controls { grid-template-columns: 1fr; }
+}
 .timbre-top { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 7px; }
 .timbre-library-button { width: 34px; padding: 0; font-size: 16px; }
 .timbre-library-popover { position: absolute; z-index: 12; top: calc(100% + 5px); right: 0; width: min(330px, 100%); padding: 10px; border: 1px solid var(--surface-1); border-radius: 9px; background: var(--panel-2); box-shadow: 0 14px 34px rgba(17,17,27,.55); }

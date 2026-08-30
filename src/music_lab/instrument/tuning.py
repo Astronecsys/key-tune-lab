@@ -12,7 +12,6 @@ from .tuning_space import (
     parse_pitch_expression,
 )
 
-
 TRADITIONAL_NOTE_NAMES = (
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
 )
@@ -302,7 +301,9 @@ class Tuning:
             ratio_label=ratio_label,
             relationship_kind=relationship_kind,
             prime_vector=vector,
-            prime_vector_label=(ratio_label if self.algebraic_basis else format_prime_vector(vector)),
+            prime_vector_label=(
+                ratio_label if self.algebraic_basis else format_prime_vector(vector)
+            ),
             approximation_error_cents=error_cents,
             tuning_id=self.id,
             tuning_name=self.name,

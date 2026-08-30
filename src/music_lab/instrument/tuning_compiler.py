@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 from .tuning import KeyPitch, Tuning, key_label
 
-
 KEY_POSITION = "key_position"
 NEAREST_FREQUENCY = "nearest_frequency"
 EQUAVE_PROPORTIONAL = "equave_proportional"

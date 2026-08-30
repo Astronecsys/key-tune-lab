@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 from threading import RLock
-from typing import Iterable
 
 from .tuning import Tuning
 from .tuning_space import (
@@ -18,7 +18,6 @@ from .tuning_space import (
     interval_cycle_space,
     lattice_space,
 )
-
 
 TUNING_DEFINITION_SCHEMA_VERSION = 1
 _TUNING_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
@@ -341,7 +340,9 @@ class TuningLibrary:
             try:
                 target.relative_to(self.user_directory.resolve())
             except ValueError as error:
-                raise ValueError("user tuning source is outside the configured directory") from error
+                raise ValueError(
+                    "user tuning source is outside the configured directory"
+                ) from error
             persisted = self._replace_definition_in_source(target, definition)
         else:
             target = self.user_directory / f"{definition['id']}.json"

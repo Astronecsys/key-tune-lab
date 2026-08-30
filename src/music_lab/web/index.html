@@ -120,6 +120,7 @@
       <section id="mappingPanel" class="editor-card mapping-panel panel" aria-label="输入与律制映射编译器">
         <div class="section-index">03 / MAPPING COMPILER</div>
         <div class="mapping-reference-fields">
+          <label><span>预设</span><select id="mappingPresetSelect"><option value="">手动参数</option></select></label>
           <label><span>策略</span><select id="mappingMode"></select></label>
           <label><span>承载 T 的输入节点</span><select id="mappingAnchorNode"></select></label>
           <label><span>T 对应音级</span><input id="mappingReferenceDegree" type="number" min="0" value="0"></label>
@@ -246,8 +247,15 @@
 
       <section id="keyboardPanel" class="keyboard-card panel" aria-label="实体键盘映射结果">
         <div class="section-heading">
-          <div><div class="section-index">10 / INPUT SURFACE</div><div id="surfaceDescription" class="subtle"></div></div>
-          <div class="surface-heading-controls"><div id="midiStatus" class="status-pill waiting">MIDI · 检查中</div><label><span>表面</span><select id="inputSurfaceSelect"></select></label><div id="activeSummary" class="mono subtle">等待输入</div></div>
+          <div class="surface-heading-copy">
+            <div class="section-index">10 / INPUT SURFACE</div>
+            <div id="activeSummary" class="mono subtle" title="等待输入">等待输入</div>
+            <div id="surfaceDescription" class="subtle"></div>
+          </div>
+          <div class="surface-heading-controls">
+            <label><span>表面</span><select id="inputSurfaceSelect"></select></label>
+            <div id="midiStatus" class="status-pill waiting">MIDI · 检查中</div>
+          </div>
         </div>
         <div class="canvas-wrap keyboard-wrap"><canvas id="keyboardCanvas"></canvas></div>
       </section>

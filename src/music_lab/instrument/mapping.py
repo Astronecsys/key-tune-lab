@@ -6,7 +6,6 @@ from .input_surface import InputNode, InputSurface
 from .tuning import KeyPitch, Tuning
 from .tuning_space import parse_pitch_expression
 
-
 MAPPING_MODES = (
     {
         "id": "continuous",

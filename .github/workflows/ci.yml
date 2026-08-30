@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Python project
+        run: |
+          python -m pip install -r requirements-panel.lock
+          python -m pip install -e . --no-deps
+      - name: Python static checks
+        run: python -m ruff check src tests
+      - name: Python tests without hardware audio
+        run: python -m pytest
+      - name: Web syntax and unit tests
+        run: |
+          npm ci
+          npm run check
+          npm test
+      - name: Install browser
+        run: npx playwright install chromium
+      - name: Browser smoke test
+        run: npm run test:e2e

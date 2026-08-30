@@ -6,12 +6,24 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .contracts import INSTRUMENT_SCHEMA_VERSION
+from .contracts import (
+    INSTRUMENT_SCHEMA_VERSION,
+    ChordBasisRequest,
+    CustomTimbreRequest,
+    CustomTuningRequest,
+    IdRequest,
+    InputNodeOnRequest,
+    MappingRequest,
+    RestorePerformanceRequest,
+    TrackCompileRequest,
+    TuningLibrarySaveRequest,
+    VolumeRequest,
+)
 from .runtime import InstrumentRuntime
-
 
 WEB_DIR = Path(__file__).resolve().parents[1] / "web"
 
@@ -42,7 +54,8 @@ def create_app(
         finally:
             runtime.stop()
 
-    app = FastAPI(title="Music Visual Lab Instrument", lifespan=lifespan)
+    app = FastAPI(title="KEY//TUNE LAB Instrument", lifespan=lifespan)
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.state.runtime = runtime
 
     @app.middleware("http")
@@ -120,67 +133,68 @@ def create_app(
         )
 
     @app.post("/api/tuning")
-    async def set_tuning(payload: dict = Body(...)) -> dict:
+    async def set_tuning(payload: IdRequest) -> dict:
         try:
-            runtime.set_tuning(str(payload["id"]))
-        except (KeyError, ValueError) as error:
+            runtime.set_tuning(payload.id)
+        except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return runtime.snapshot()
 
     @app.post("/api/tuning/custom")
-    async def set_custom_tuning(payload: dict = Body(...)) -> dict:
+    async def set_custom_tuning(payload: CustomTuningRequest) -> dict:
+        definition = payload.to_payload()
         try:
-            if "kind" in payload or "equave_expression" in payload:
-                runtime.set_custom_tuning_space(payload)
+            if "kind" in definition or "equave_expression" in definition:
+                runtime.set_custom_tuning_space(definition)
             else:
                 runtime.set_custom_tuning(
-                    divisions=int(payload["divisions"]),
-                    equave_ratio=float(payload["equave_ratio"]),
-                    reference_midi=int(payload["reference_midi"]),
-                    reference_frequency_hz=float(payload["reference_frequency_hz"]),
+                    divisions=int(definition["divisions"]),
+                    equave_ratio=float(definition["equave_ratio"]),
+                    reference_midi=int(definition["reference_midi"]),
+                    reference_frequency_hz=float(definition["reference_frequency_hz"]),
                 )
         except (KeyError, TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return runtime.snapshot()
 
     @app.post("/api/timbre")
-    async def set_timbre(payload: dict = Body(...)) -> dict:
+    async def set_timbre(payload: IdRequest) -> dict:
         try:
-            runtime.set_timbre(str(payload["id"]))
-        except (KeyError, ValueError) as error:
+            runtime.set_timbre(payload.id)
+        except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return runtime.snapshot()
 
     @app.post("/api/timbre/custom")
-    async def set_custom_timbre(payload: dict = Body(...)) -> dict:
+    async def set_custom_timbre(payload: CustomTimbreRequest) -> dict:
         try:
-            partials = [(float(item[0]), float(item[1])) for item in payload["partials"]]
+            partials = [(float(item[0]), float(item[1])) for item in payload.partials]
             runtime.set_custom_timbre(partials)
-        except (KeyError, TypeError, ValueError, IndexError) as error:
+        except (TypeError, ValueError, IndexError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return runtime.snapshot()
 
     @app.post("/api/mapping")
-    async def set_mapping(payload: dict = Body(...)) -> dict:
+    async def set_mapping(payload: MappingRequest) -> dict:
         try:
-            runtime.set_mapping(payload)
+            runtime.set_mapping(payload.to_payload())
         except (TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return runtime.snapshot()
 
     @app.post("/api/audio/volume")
-    async def set_volume(payload: dict = Body(...)) -> dict:
+    async def set_volume(payload: VolumeRequest) -> dict:
         try:
-            runtime.set_volume(float(payload["value"]))
-        except (KeyError, TypeError, ValueError) as error:
+            runtime.set_volume(payload.value)
+        except (TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return runtime.snapshot()
 
     @app.post("/api/tuning/library")
-    async def save_tuning_to_library(payload: dict = Body(...)) -> dict:
+    async def save_tuning_to_library(payload: TuningLibrarySaveRequest) -> dict:
         try:
-            saved = runtime.save_current_tuning(payload)
-        except (KeyError, TypeError, ValueError) as error:
+            saved = runtime.save_current_tuning(payload.to_payload())
+        except (TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return {"saved": saved.summary(), "state": runtime.snapshot()}
 
@@ -193,20 +207,20 @@ def create_app(
         return runtime.snapshot()
 
     @app.post("/api/input-surface")
-    async def set_input_surface(payload: dict = Body(...)) -> dict:
+    async def set_input_surface(payload: IdRequest) -> dict:
         try:
-            runtime.set_input_surface(str(payload["id"]))
-        except (KeyError, TypeError, ValueError) as error:
+            runtime.set_input_surface(payload.id)
+        except (TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return runtime.snapshot()
 
     @app.post("/api/input/{node_id}/on")
     async def input_node_on(
         node_id: str,
-        payload: dict | None = Body(default=None),
+        payload: InputNodeOnRequest | None = None,
     ) -> dict:
         try:
-            runtime.input_node_on(node_id, int((payload or {}).get("velocity", 96)))
+            runtime.input_node_on(node_id, (payload or InputNodeOnRequest()).velocity)
         except (TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return {"node_id": node_id, "active": True}
@@ -220,9 +234,9 @@ def create_app(
         return {"node_id": node_id, "active": False}
 
     @app.post("/api/chord/basis")
-    async def set_chord_basis(payload: dict = Body(...)) -> dict:
+    async def set_chord_basis(payload: ChordBasisRequest) -> dict:
         try:
-            runtime.set_chord_basis(payload)
+            runtime.set_chord_basis(payload.to_payload())
         except (TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return runtime.snapshot()
@@ -256,10 +270,10 @@ def create_app(
         return {"cleared": True}
 
     @app.post("/api/recording/restore")
-    async def restore_recording(payload: dict = Body(...)) -> dict:
+    async def restore_recording(payload: RestorePerformanceRequest) -> dict:
         try:
-            runtime.restore_performance(list(payload["notes"]))
-        except (KeyError, TypeError, ValueError) as error:
+            runtime.restore_performance([note.to_payload() for note in payload.notes])
+        except (TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return {"restored": len(runtime.performance_notes)}
 
@@ -302,12 +316,12 @@ def create_app(
     @app.post("/api/tracks/{track_id}/compile")
     async def set_track_compile_mode(
         track_id: str,
-        payload: dict = Body(...),
+        payload: TrackCompileRequest,
     ) -> dict:
         try:
-            mode = str(payload["mode"])
+            mode = payload.mode
             runtime.set_track_compile_mode(track_id, mode)
-        except (KeyError, TypeError, ValueError) as error:
+        except (TypeError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return {"track_id": track_id, "compile_mode": mode}
 

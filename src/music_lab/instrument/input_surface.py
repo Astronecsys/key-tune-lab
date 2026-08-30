@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import os
+import re
+from dataclasses import asdict, dataclass, replace
+from pathlib import Path
+from threading import RLock
+
+from .definition_library import load_open_definitions
+
+INPUT_SURFACE_DEFINITION_SCHEMA_VERSION = 1
+_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 
 @dataclass(frozen=True)
@@ -26,6 +35,7 @@ class InputSurface:
     description: str
     nodes: tuple[InputNode, ...]
     geometry: dict
+    library_scope: str = "runtime"
 
     def to_dict(self, *, include_nodes: bool = False) -> dict:
         payload = {
@@ -35,6 +45,7 @@ class InputSurface:
             "description": self.description,
             "node_count": len(self.nodes),
             "geometry": dict(self.geometry),
+            "library_scope": self.library_scope,
         }
         if include_nodes:
             payload["nodes"] = [node.to_dict() for node in self.nodes]
@@ -91,7 +102,13 @@ def piano_surface(
     )
 
 
-def hex_surface(*, radius: int = 4) -> InputSurface:
+def hex_surface(
+    *,
+    radius: int = 4,
+    id: str = "hex_61",
+    name: str = "61 格蜂窝表面",
+    description: str = "二维轴向坐标蜂窝；可使用等分步长或纯律生成基映射。",
+) -> InputSurface:
     nodes: list[InputNode] = []
     for q in range(-radius, radius + 1):
         r_min = max(-radius, -q - radius)
@@ -120,24 +137,92 @@ def hex_surface(*, radius: int = 4) -> InputSurface:
         for index, node in enumerate(nodes)
     ]
     return InputSurface(
-        id="hex_61",
-        name="61 格蜂窝表面",
+        id=id,
+        name=name,
         kind="hex",
-        description="二维轴向坐标蜂窝；可使用等分步长或纯律生成基映射。",
+        description=description,
         nodes=tuple(nodes),
         geometry={"radius": radius, "orientation": "pointy"},
     )
 
 
-SURFACES = {
-    surface.id: surface
-    for surface in (
-        piano_surface(id="piano_61", name="当前 61 键", low_midi=36, key_count=61),
-        piano_surface(id="piano_66", name="66 键钢琴", low_midi=30, key_count=66),
-        piano_surface(id="piano_88", name="88 键钢琴", low_midi=21, key_count=88),
-        hex_surface(),
+def normalize_input_surface_definition(document: dict) -> dict:
+    if int(document.get("schema_version", 0)) != INPUT_SURFACE_DEFINITION_SCHEMA_VERSION:
+        raise ValueError("unsupported input surface definition schema")
+    surface_id = str(document.get("id", "")).strip()
+    if not _ID_PATTERN.fullmatch(surface_id):
+        raise ValueError("invalid input surface id")
+    name = str(document.get("name", "")).strip()
+    kind = str(document.get("kind", "")).strip()
+    if not name or kind not in {"piano", "hex"}:
+        raise ValueError("input surface requires a name and supported kind")
+    geometry = dict(document.get("geometry") or {})
+    if kind == "piano":
+        low_midi = int(geometry["low_midi"])
+        key_count = int(geometry["key_count"])
+        piano_surface(id=surface_id, name=name, low_midi=low_midi, key_count=key_count)
+        geometry = {"low_midi": low_midi, "key_count": key_count}
+    else:
+        radius = int(geometry.get("radius", 4))
+        if not 1 <= radius <= 12:
+            raise ValueError("hex radius must be between 1 and 12")
+        geometry = {"radius": radius}
+    return {
+        "schema_version": INPUT_SURFACE_DEFINITION_SCHEMA_VERSION,
+        "id": surface_id,
+        "name": name,
+        "kind": kind,
+        "description": str(document.get("description", "")).strip(),
+        "geometry": geometry,
+    }
+
+
+def default_user_input_surface_directory() -> Path:
+    configured = os.environ.get("KEY_TUNE_INPUT_SURFACE_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return (Path.cwd() / "configs" / "input_surfaces").resolve()
+
+
+def _surface_from_definition(definition: dict, scope: str) -> InputSurface:
+    if definition["kind"] == "piano":
+        surface = piano_surface(
+            id=definition["id"],
+            name=definition["name"],
+            low_midi=definition["geometry"]["low_midi"],
+            key_count=definition["geometry"]["key_count"],
+        )
+        surface = replace(surface, description=definition["description"] or surface.description)
+    else:
+        surface = hex_surface(
+            id=definition["id"],
+            name=definition["name"],
+            description=definition["description"] or "二维轴向坐标蜂窝。",
+            radius=definition["geometry"]["radius"],
+        )
+    return replace(surface, library_scope=scope)
+
+
+_SURFACE_LOCK = RLock()
+SURFACES: dict[str, InputSurface] = {}
+
+
+def reload_input_surface_library() -> None:
+    entries = load_open_definitions(
+        preset_folder="input_surfaces",
+        user_directory=default_user_input_surface_directory(),
+        normalize=normalize_input_surface_definition,
     )
-}
+    surfaces = {
+        surface_id:_surface_from_definition(entry.definition, entry.scope)
+        for surface_id, entry in entries.items()
+    }
+    with _SURFACE_LOCK:
+        SURFACES.clear()
+        SURFACES.update(surfaces)
+
+
+reload_input_surface_library()
 
 
 def get_input_surface(surface_id: str) -> InputSurface:

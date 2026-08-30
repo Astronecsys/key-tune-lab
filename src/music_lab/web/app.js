@@ -6,20 +6,30 @@ import {
   relationshipColumns,
   tonesHighToLow,
 } from "./chord-view.js";
+import { requestFloat32, requestJson } from "./api-client.js";
 import {
   INSTRUMENT_SCHEMA_VERSION,
   mergeLiveSnapshot,
   replaceAnalysis,
   replaceSnapshot,
 } from "./instrument-state.js";
-import { createGridLayoutManager } from "./layout-manager.js";
+import {
+  LAYOUT_STORAGE_KEY,
+  createGridLayoutManager,
+} from "./layout-manager.js";
 import { DESKTOP_MANIFEST, PANEL_MANIFEST } from "./panel-manifest.js";
 import {
+  PRESENTATION_STORAGE_KEY,
   loadPresentationDocument,
   moveScene,
   nextSceneId,
   savePresentationDocument,
 } from "./presentation-layout.js";
+import {
+  TIMBRE_STORAGE_KEY,
+  createProjectStorage,
+} from "./project-document.js";
+import { createInstrumentActionRegistry } from "./presentation-actions.js";
 import { PanelRegistry } from "./render-scheduler.js";
 import { delayedPhasePoints } from "./signal-view.js";
 import {
@@ -33,6 +43,13 @@ import {
   tuningPointDescription,
   tuningPointFromCoordinates,
 } from "./tuning-space-view.js";
+import { TelemetryScheduler } from "./telemetry-scheduler.js";
+
+const projectStorage = createProjectStorage(window.localStorage, {
+  layout:LAYOUT_STORAGE_KEY,
+  presentation:PRESENTATION_STORAGE_KEY,
+  timbres:TIMBRE_STORAGE_KEY,
+});
 
 const state = {
   snapshot: null,
@@ -61,7 +78,8 @@ const state = {
   selectedSavedTimbreName: null,
   chordRenderSignature: null,
   spectrumMemory:createSpectrumMemory(),
-  presentation:{document:null, timer:null, playing:false, actionEpoch:0},
+  presentation:{document:null, timer:null, playing:false, actionEpoch:0, actions:null},
+  telemetry:null,
 };
 
 const panelRegistry = new PanelRegistry({
@@ -237,7 +255,7 @@ function presentationSnapshot() {
 function persistPresentation() {
   if (state.presentation.document) {
     state.presentation.document = savePresentationDocument(
-      window.localStorage,
+      projectStorage,
       state.presentation.document,
     );
   }
@@ -289,75 +307,22 @@ function parseSceneActions() {
   return actions;
 }
 
-const presentationDelay = (seconds) => new Promise((resolve) => {
-  window.setTimeout(resolve, Math.max(0, Math.min(3600, Number(seconds) || 0)) * 1000);
-});
-
-function valueAtPath(root, path) {
-  return String(path || "").split(".").filter(Boolean).reduce(
-    (value, key) => value == null ? undefined : value[key],
-    root,
-  );
-}
-
 async function runSceneActions(scene, epoch) {
-  for (const action of scene.actions || []) {
-    if (epoch !== state.presentation.actionEpoch) return;
-    try {
-      const type = String(action.type || "");
-      if (type === "wait") {
-        await presentationDelay(action.seconds);
-      } else if (type === "focus_panel") {
-        state.freeLayout.focusPanel(action.panel_id || null);
-      } else if (type === "switch_desktop") {
-        if (!state.freeLayout.switchDesktop(action.desktop_id)) {
-          throw new Error(`未知桌面：${action.desktop_id}`);
-        }
-      } else if (type === "set_panel_visibility") {
-        state.freeLayout.setHiddenPanels(action.hidden_panels || [], {persist:false});
-      } else if (type === "set_view") {
-        state.freeLayout.setViewSettings(action.settings || {}, {persist:false});
-      } else if (type === "clear_spectrum_history") {
-        resetSpectrumMemory();
-        panelRegistry.invalidate("spectrumPanel");
-      } else if (type === "playback_start") {
-        if (!action.track_id) throw new Error("playback_start 缺少 track_id");
-        await api(`/api/playback/${encodeURIComponent(action.track_id)}/start`, {method:"POST"});
-        await refreshState();
-      } else if (type === "playback_stop") {
-        await api("/api/playback/stop", {method:"POST"});
-        await refreshState();
-      } else if (type === "recording_start") {
-        await api("/api/recording/start", {method:"POST"});
-        await refreshState();
-      } else if (type === "recording_stop") {
-        await api("/api/recording/stop", {method:"POST"});
-        await refreshState();
-      } else if (type === "chord_basis") {
-        await api("/api/chord/basis", {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify(action.payload || action),
-        });
-        await refreshState();
-      } else if (type === "assert_state") {
-        const actual = valueAtPath(state.snapshot, action.path);
-        const expected = Object.prototype.hasOwnProperty.call(action, "equals")
-          ? action.equals
-          : true;
-        if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-          throw new Error(`断言失败：${action.path} = ${JSON.stringify(actual)}，预期 ${JSON.stringify(expected)}`);
-        }
-      } else if (type === "toast") {
-        showToast(String(action.message || ""));
-      } else if (type) {
-        throw new Error(`未知场景动作：${type}`);
-      }
-    } catch (error) {
-      showToast(`场景动作失败：${error.message}`);
-      return;
-    }
+  if (!state.presentation.actions) {
+    state.presentation.actions = createInstrumentActionRegistry({
+      layout:() => state.freeLayout,
+      request:requestJson,
+      refreshState,
+      getSnapshot:() => state.snapshot,
+      resetSpectrumHistory:resetSpectrumMemory,
+      invalidatePanel:(panelId) => panelRegistry.invalidate(panelId),
+      showMessage:showToast,
+    });
   }
+  await state.presentation.actions.run(scene.actions || [], {
+    isCancelled:() => epoch !== state.presentation.actionEpoch,
+    onError:(error) => showToast(`场景动作失败：${error.message}`),
+  });
 }
 
 function selectPresentationScene(sceneId, { startTimer = state.presentation.playing } = {}) {
@@ -396,7 +361,7 @@ function setPresentationPlaying(playing) {
 
 function initializePresentationLayouts() {
   const fallback = {name:"默认布局", ...presentationSnapshot()};
-  state.presentation.document = loadPresentationDocument(window.localStorage, fallback);
+  state.presentation.document = loadPresentationDocument(projectStorage, fallback);
   renderPresentationControls();
   $("layoutSceneSelect").addEventListener("change", (event) => selectPresentationScene(event.target.value));
   $("layoutSceneList").addEventListener("click", (event) => {
@@ -485,6 +450,17 @@ function initializePresentationLayouts() {
     assignments:() => state.freeLayout?.getPanelDesktops() || {},
     movePanel:(panelId, desktopId) => state.freeLayout?.setPanelDesktop(panelId, desktopId) || false,
   };
+  window.KEY_TUNE_PROJECT = {
+    getDocument:() => projectStorage.getDocument(),
+    exportJson:() => JSON.stringify(projectStorage.getDocument(), null, 2),
+    importJson:(source) => {
+      const documentData = typeof source === "string" ? JSON.parse(source) : source;
+      const imported = projectStorage.replaceDocument(documentData);
+      // 布局控制器持有内存态；刷新可以让所有 section 在同一个时刻完成切换。
+      window.location.reload();
+      return imported;
+    },
+  };
   selectPresentationScene(state.presentation.document.selectedId, {startTimer:false});
 }
 
@@ -496,15 +472,7 @@ function showToast(message) {
   state.toastTimer = setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
-async function api(path, options = {}) {
-  const response = await fetch(path, options);
-  if (!response.ok) {
-    let message = response.statusText;
-    try { message = (await response.json()).detail || message; } catch (_) {}
-    throw new Error(message);
-  }
-  return response.json();
-}
+const api = requestJson;
 
 async function applyChordBasis(payload) {
   try {
@@ -541,18 +509,13 @@ async function refreshPhase() {
   if (state.phaseRefreshPending) return;
   state.phaseRefreshPending = true;
   try {
-    const response = await fetch("/api/phase?frame_count=4096", {cache:"no-store"});
-    if (!response.ok) throw new Error(response.statusText);
-    const schemaVersion = Number(response.headers.get("X-Schema-Version"));
-    if (
-      !Number.isInteger(schemaVersion)
-      || schemaVersion < INSTRUMENT_SCHEMA_VERSION - 1
-      || schemaVersion > INSTRUMENT_SCHEMA_VERSION
-    ) throw new Error("相图数据版本不兼容");
-    const samples = Array.from(new Float32Array(await response.arrayBuffer()));
+    const payload = await requestFloat32("/api/phase?frame_count=4096", {
+      minimumSchemaVersion:INSTRUMENT_SCHEMA_VERSION - 1,
+      maximumSchemaVersion:INSTRUMENT_SCHEMA_VERSION,
+    });
     state.phase = {
-      samples,
-      sampleRateHz:Number(response.headers.get("X-Sample-Rate-Hz")),
+      samples:Array.from(payload.samples),
+      sampleRateHz:payload.sampleRateHz,
     };
     panelRegistry.invalidate("outputPhasePanel");
   } catch (_) {
@@ -1145,7 +1108,7 @@ function schedulePartialApply() {
 }
 
 function savedTimbres() {
-  try { return JSON.parse(localStorage.getItem("music-lab-saved-timbres") || "{}"); }
+  try { return JSON.parse(projectStorage.getItem(TIMBRE_STORAGE_KEY) || "{}"); }
   catch (_) { return {}; }
 }
 
@@ -1667,9 +1630,12 @@ function renderStatus() {
     : "PLAYBACK · 空闲";
   playbackElement.className = `status-pill ${playback.playing ? "ok" : "waiting"}`;
   const active = state.snapshot.keyboard.active;
-  $("activeSummary").textContent = active.length
+  const activeSummary = active.length
     ? `${active.length} 个触发音 · ${active.map((item) => item.frequency_hz.toFixed(1)).join(" / ")} Hz`
     : "等待琴键输入";
+  // 摘要会随演奏快速变化；title 保留被界面截断后的完整频率列表。
+  $("activeSummary").textContent = activeSummary;
+  $("activeSummary").title = activeSummary;
 }
 
 function fillSelect(select, options, currentId) {
@@ -1796,6 +1762,17 @@ function renderMappingPanel() {
   if (!state.snapshot) return;
   const keyboard = keyboardView();
   const mapping = keyboard.mapping;
+  const mappingPresets = (state.snapshot.mapping_presets || []).filter(
+    (preset) => preset.surface_kinds?.includes(keyboard.surface.kind),
+  );
+  const presetSelect = $("mappingPresetSelect");
+  const previousPreset = presetSelect.value;
+  presetSelect.innerHTML = '<option value="">手动参数</option>' + mappingPresets
+    .map((preset) => `<option value="${escapeHtml(preset.id)}">${escapeHtml(preset.name)}</option>`)
+    .join("");
+  if (mappingPresets.some((preset) => preset.id === previousPreset)) {
+    presetSelect.value = previousPreset;
+  }
   const mappingModes = state.snapshot.mapping_modes || [
     {id:"continuous", name:"连续音级"},
     {id:"reverse", name:"反向连续"},
@@ -1965,6 +1942,7 @@ function initializeFreeLayout() {
     alignButton:$("layoutAlignButton"),
     saveDefaultButton:$("layoutSaveDefaultButton"),
     resetButton:$("layoutResetButton"),
+    storage:projectStorage,
     onLayoutChange:(panelIds) => panelRegistry.invalidate(panelIds),
     onDefaultSaved:(mode) => showToast(`已保存${mode === "wide" ? "宽屏" : "紧凑屏"}默认布局`),
     onVisibilityChange:(hiddenPanelIds, panelDesktops, activeDesktopId) => {
@@ -1987,7 +1965,7 @@ function connectWebSocket() {
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(`${scheme}://${location.host}/ws`);
   const fullRefreshEvents = new Set([
-    "ready", "status", "configuration", "target_loaded", "tracks",
+    "ready", "configuration", "target_loaded", "tracks",
     "performance_cleared", "recording",
   ]);
   socket.onmessage = (message) => {
@@ -1995,7 +1973,7 @@ function connectWebSocket() {
     let event;
     try { event = JSON.parse(message.data); } catch (_) { event = {type: "ready"}; }
     if (fullRefreshEvents.has(event.type)) refreshState();
-    else refreshLiveState();
+    else state.telemetry?.requestLive();
   };
   socket.onclose = () => setTimeout(connectWebSocket, 1200);
 }
@@ -2232,7 +2210,7 @@ function bindControls() {
     if (!name) return showToast("请先输入音色名称");
     const library = savedTimbres();
     library[name] = state.partialDraft.map((partial) => ({multiple:partial.multiple, amplitude:partial.amplitude}));
-    localStorage.setItem("music-lab-saved-timbres", JSON.stringify(library));
+    projectStorage.setItem(TIMBRE_STORAGE_KEY, JSON.stringify(library));
     state.selectedSavedTimbreName = name;
     renderTimbreChoices();
     showToast(`已保存音色：${name}`);
@@ -2245,7 +2223,7 @@ function bindControls() {
     if (!name) return showToast("请先选择一个已保存音色");
     const library = savedTimbres();
     delete library[name];
-    localStorage.setItem("music-lab-saved-timbres", JSON.stringify(library));
+    projectStorage.setItem(TIMBRE_STORAGE_KEY, JSON.stringify(library));
     state.selectedSavedTimbreName = null;
     setField("savedTimbreName", "");
     renderTimbreChoices();
@@ -2339,6 +2317,26 @@ function bindControls() {
       state.hoveredInputId = null;
       await refreshState();
     } catch (error) { showToast(error.message); }
+  });
+  $("mappingPresetSelect").addEventListener("change", (event) => {
+    const preset = (state.snapshot.mapping_presets || []).find(
+      (candidate) => candidate.id === event.target.value,
+    );
+    if (!preset) return;
+    const mapping = preset.mapping || {};
+    Object.entries({
+      mappingMode:mapping.mode,
+      mappingStep:mapping.degree_step,
+      mappingSubset:Array.isArray(mapping.subset_degrees) ? mapping.subset_degrees.join(",") : mapping.subset_degrees,
+      mappingQStep:mapping.q_step,
+      mappingRStep:mapping.r_step,
+      mappingQRatio:mapping.q_ratio_expression,
+      mappingRRatio:mapping.r_ratio_expression,
+    }).forEach(([id, value]) => {
+      if (value !== undefined) setField(id, value);
+    });
+    updateMappingStrategyVisibility(mapping.mode || $("mappingMode").value);
+    $("mappingSummary").textContent = `${preset.name} · ${preset.description || "预设参数已载入，点击“编译映射”应用"}`;
   });
   $("applyMappingButton").addEventListener("click", async () => {
     try {
@@ -2532,24 +2530,23 @@ async function boot() {
   initializePresentationLayouts();
   bindControls();
   await refreshState();
+  state.telemetry = new TelemetryScheduler({
+    isLiveActive:() => Boolean(
+      state.snapshot?.recording
+      || state.snapshot?.playback?.playing
+      || state.snapshot?.keyboard?.active?.length
+    ),
+    isPanelVisible:panelVisible,
+    refreshLive:refreshLiveState,
+    refreshAnalysis,
+    refreshPhase,
+    invalidatePanel:(panelId) => panelRegistry.invalidate(panelId),
+  });
+  state.telemetry.start();
   connectWebSocket();
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) refreshState();
   });
-  setInterval(() => {
-    if (document.hidden) return;
-    if (
-      state.snapshot?.recording
-      || state.snapshot?.playback?.playing
-      || state.snapshot?.keyboard?.active?.length
-    ) refreshLiveState();
-  }, 120);
-  setInterval(() => {
-    if (document.hidden) return;
-    if (panelVisible("spectrumPanel")) refreshAnalysis();
-    if (panelVisible("lissajousPanel")) panelRegistry.invalidate("lissajousPanel");
-    if (panelVisible("outputPhasePanel")) refreshPhase();
-  }, 100);
 }
 
 boot();

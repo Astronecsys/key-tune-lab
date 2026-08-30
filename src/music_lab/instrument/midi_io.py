@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable
 
-
 MidiEventHandler = Callable[[dict], None]
 MidiStatusHandler = Callable[[dict], None]
 
